@@ -1,0 +1,151 @@
+@page "/"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+
+<div class="page-date">@DateTime.Now.ToString("dddd · MMMM d, yyyy")</div>
+<div class="page-title">stream</div>
+
+<!-- Quick capture -->
+<div class="quick-capture">
+    <textarea @bind="newBody" @bind:event="oninput" placeholder="write something..." rows="2"></textarea>
+    @if (!string.IsNullOrWhiteSpace(newBody))
+    {
+        <div class="quick-capture-actions">
+            <input type="text" @bind="newTitle" placeholder="title (optional)"
+                   style="flex:1; background:transparent; border:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal); padding:6px 10px; outline:none;" />
+            <button class="btn-zen primary" @onclick="CreateCapture">save</button>
+        </div>
+    }
+</div>
+
+@if (toast != null)
+{
+    <div class="toast-msg show">@toast</div>
+}
+
+<!-- Stream -->
+<div class="note-stream-label">recent captures (@totalCount total)</div>
+
+@if (entities.Count == 0)
+{
+    <div class="empty-state">
+        <div class="icon">▦</div>
+        <p>nothing here yet.<br/>type something above, or use the CLI.</p>
+    </div>
+}
+else
+{
+    string? lastDay = null;
+    foreach (var e in entities)
+    {
+        var day = e.CreatedAt.ToLocalTime().ToString("MMMM d");
+        if (day != lastDay)
+        {
+            <div class="stream-day-sep">@day</div>
+            lastDay = day;
+        }
+
+        <div class="note-card @GetTypeClass(e.Type)" @onclick="() => ViewEntity(e.Id)">
+            <div class="note-card-meta">
+                <span class="note-type-tag @GetTagClass(e.Type)">@e.Type</span>
+                <span class="note-time">@e.CreatedAt.ToLocalTime().ToString("HH:mm")</span>
+                <span class="note-id">@e.Id.ToString()[..8]</span>
+            </div>
+            @if (e.Title != null)
+            {
+                <div class="note-title">@e.Title</div>
+            }
+            @if (e.Body != null)
+            {
+                <div class="note-preview">@e.Body</div>
+            }
+            @{
+                var threads = e.LinksFrom.Where(l => l.Reason == "tagged" && l.To != null).Select(l => l.To).ToList();
+            }
+            @if (threads.Count > 0)
+            {
+                <div class="note-themes">
+                    @foreach (var t in threads)
+                    {
+                        <span class="theme-chip">@t.Title</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (entities.Count < totalCount)
+    {
+        <div style="text-align:center; margin:20px 0;">
+            <button class="btn-zen" @onclick="LoadMore">load more</button>
+        </div>
+    }
+}
+
+@code {
+    private List<Entity> entities = [];
+    private int page = 0;
+    private int totalCount = 0;
+    private string newBody = "";
+    private string newTitle = "";
+    private string? toast;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEntities();
+    }
+
+    private async Task LoadEntities()
+    {
+        entities = await Svc.GetStream(page: 0, pageSize: (page + 1) * 20);
+        totalCount = await Svc.Count();
+    }
+
+    private async Task LoadMore()
+    {
+        page++;
+        await LoadEntities();
+    }
+
+    private async Task CreateCapture()
+    {
+        if (string.IsNullOrWhiteSpace(newBody)) return;
+
+        var title = string.IsNullOrWhiteSpace(newTitle) ? null : newTitle.Trim();
+        await Svc.Create(EntityTypes.Capture, title, newBody.Trim());
+        newBody = "";
+        newTitle = "";
+        page = 0;
+        await LoadEntities();
+        await ShowToast("captured");
+    }
+
+    private async Task ShowToast(string msg)
+    {
+        toast = msg;
+        StateHasChanged();
+        await Task.Delay(1500);
+        toast = null;
+        StateHasChanged();
+    }
+
+    [Inject] private NavigationManager Nav { get; set; } = null!;
+
+    private void ViewEntity(Guid id) => Nav.NavigateTo($"/entity/{id}");
+
+    private string GetTypeClass(string type) => type switch
+    {
+        "capture" => "type-text",
+        "thread" => "type-dream",
+        _ => ""
+    };
+
+    private string GetTagClass(string type) => type switch
+    {
+        "capture" => "tag-capture",
+        "thread" => "tag-thread",
+        "stash" => "tag-stash",
+        _ => ""
+    };
+}

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nōto — Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --charcoal:   #2e2e2e;
+      --charcoal-2: #3d3d3d;
+      --slate:      #636e72;
+      --slate-2:    #8a9ba8;
+      --matcha:     #7a9e7e;
+      --matcha-2:   #a8c5aa;
+      --matcha-dim: #4a6b4e;
+      --parchment:  #f4efe4;
+      --parchment-2:#ede5d3;
+      --chalk:      #dad4c8;
+      --ink:        #2e2e2e;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      background-color: var(--parchment);
+      color: var(--ink);
+      font-size: 13px;
+      min-height: 100vh;
+      /* subtle paper texture via repeating gradient */
+      background-image:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 28px,
+          rgba(0,0,0,0.018) 28px,
+          rgba(0,0,0,0.018) 29px
+        );
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    .sidebar {
+      width: 220px;
+      min-height: 100vh;
+      background-color: var(--charcoal);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      z-index: 100;
+    }
+
+    .sidebar-brand {
+      padding: 28px 24px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .sidebar-brand .app-name {
+      font-size: 17px;
+      font-weight: 500;
+      color: var(--parchment);
+      letter-spacing: 0.04em;
+    }
+
+    .sidebar-brand .app-sub {
+      font-size: 10px;
+      color: var(--slate-2);
+      letter-spacing: 0.12em;
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+
+    .nav-section-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--slate);
+      padding: 20px 24px 6px;
+    }
+
+    .sidebar-nav .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 24px;
+      font-size: 12px;
+      color: var(--slate-2);
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .sidebar-nav .nav-link:hover {
+      color: var(--parchment);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .sidebar-nav .nav-link.active {
+      color: var(--matcha-2);
+      border-left-color: var(--matcha);
+      background: rgba(122,158,126,0.08);
+    }
+
+    .sidebar-nav .nav-link .icon {
+      width: 14px;
+      text-align: center;
+      opacity: 0.7;
+    }
+
+    .sidebar-nav .badge-count {
+      margin-left: auto;
+      font-size: 9px;
+      background: rgba(122,158,126,0.25);
+      color: var(--matcha-2);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: 20px 24px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .capture-btn {
+      display: block;
+      width: 100%;
+      background: var(--matcha);
+      color: var(--charcoal);
+      border: none;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .capture-btn:hover {
+      background: var(--matcha-2);
+    }
+
+    /* ── Main layout ─────────────────────────────────────── */
+    .main-wrap {
+      margin-left: 220px;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 36px 40px;
+      max-width: 680px;
+    }
+
+    .right-panel {
+      width: 280px;
+      padding: 36px 28px;
+      border-left: 1px solid var(--chalk);
+      background: rgba(255,255,255,0.3);
+    }
+
+    /* ── Page header ─────────────────────────────────────── */
+    .page-date {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 6px;
+    }
+
+    .page-title {
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--charcoal);
+      margin-bottom: 32px;
+      letter-spacing: -0.01em;
+    }
+
+    /* ── Note cards ──────────────────────────────────────── */
+    .note-stream-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 14px;
+    }
+
+    .note-card {
+      background: rgba(255,255,255,0.55);
+      border: 1px solid var(--chalk);
+      border-left: 3px solid transparent;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .note-card:hover {
+      background: rgba(255,255,255,0.8);
+      border-left-color: var(--matcha);
+    }
+
+    .note-card.type-voice { border-left-color: var(--matcha-dim); }
+    .note-card.type-dream { border-left-color: var(--slate); }
+    .note-card.type-text  { border-left-color: var(--chalk); }
+
+    .note-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 7px;
+    }
+
+    .note-type-tag {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 2px;
+    }
+
+    .tag-voice { background: rgba(74,107,78,0.12); color: var(--matcha-dim); }
+    .tag-dream { background: rgba(99,110,114,0.12); color: var(--slate); }
+    .tag-text  { background: rgba(0,0,0,0.06); color: var(--slate); }
+
+    .note-time {
+      font-size: 10px;
+      color: var(--slate-2);
+      margin-left: auto;
+    }
+
+    .note-preview {
+      font-size: 12px;
+      color: var(--charcoal-2);
+      line-height: 1.65;
+      /* clamp to 2 lines */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .note-themes {
+      margin-top: 9px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .theme-chip {
+      font-size: 9px;
+      padding: 2px 8px;
+      background: var(--parchment-2);
+      border: 1px solid var(--chalk);
+      color: var(--slate);
+      border-radius: 1px;
+      letter-spacing: 0.05em;
+    }
+
+    .theme-chip.matched {
+      background: rgba(122,158,126,0.1);
+      border-color: var(--matcha-2);
+      color: var(--matcha-dim);
+    }
+
+    /* ── Right panel ─────────────────────────────────────── */
+    .panel-section {
+      margin-bottom: 32px;
+    }
+
+    .panel-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--chalk);
+    }
+
+    .life-arc-snippet {
+      font-size: 11px;
+      line-height: 1.8;
+      color: var(--charcoal-2);
+      font-style: italic;
+    }
+
+    .life-arc-snippet em {
+      font-style: normal;
+      color: var(--matcha-dim);
+    }
+
+    /* Theme bars */
+    .theme-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .theme-row-name {
+      font-size: 10px;
+      color: var(--charcoal-2);
+      width: 120px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .theme-bar-wrap {
+      flex: 1;
+      height: 3px;
+      background: var(--chalk);
+      border-radius: 2px;
+    }
+
+    .theme-bar-fill {
+      height: 100%;
+      background: var(--matcha);
+      border-radius: 2px;
+      opacity: 0.75;
+    }
+
+    .theme-count {
+      font-size: 9px;
+      color: var(--slate-2);
+      width: 20px;
+      text-align: right;
+    }
+
+    /* Recent captures strip */
+    .capture-strip {
+      display: flex;
+      gap: 8px;
+    }
+
+    .capture-thumb {
+      width: 52px;
+      height: 52px;
+      background: var(--chalk);
+      border: 1px solid var(--parchment-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      position: relative;
+      transition: border-color 0.15s;
+    }
+
+    .capture-thumb:hover {
+      border-color: var(--matcha-2);
+    }
+
+    .capture-thumb .thumb-label {
+      position: absolute;
+      bottom: 2px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 7px;
+      letter-spacing: 0.06em;
+      color: var(--slate);
+    }
+
+    /* Divider */
+    .zen-divider {
+      border: none;
+      border-top: 1px solid var(--chalk);
+      margin: 28px 0;
+    }
+
+    /* Mood indicator */
+    .mood-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .mood-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+    }
+
+    .mood-label {
+      font-size: 10px;
+      color: var(--slate);
+    }
+
+    /* Separator line note */
+    .stream-day-sep {
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--slate-2);
+      margin: 22px 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .stream-day-sep::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--chalk);
+    }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--chalk); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────── -->
+<div class="sidebar">
+  <div class="sidebar-brand">
+    <div class="app-name">nōto</div>
+    <div class="app-sub">personal archive</div>
+  </div>
+
+  <div class="nav-section-label">capture</div>
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-link active">
+      <span class="icon">▦</span> stream
+    </a>
+    <a href="#" class="nav-link">
+      <span class="icon">◎</span> voice notes
+      <span class="badge-count">3</span>
+    </a>
+    <a href="#" class="nav-link">
+      <span class="icon">⊡</span> photos
+    </a>
+  </nav>
+
+  <div class="nav-section-label">synthesis</div>
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-link">
+      <span class="icon">◈</span> themes
+    </a>
+    <a href="#" class="nav-link">
+      <span class="icon">◉</span> dreams
+    </a>
+    <a href="#" class="nav-link">
+      <span class="icon">∿</span> life arc
+    </a>
+    <a href="mockup_workspace.html" class="nav-link">
+      <span class="icon">✦</span> workspace
+    </a>
+  </nav>
+
+  <div class="nav-section-label">seeds</div>
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-link">
+      <span class="icon">⊹</span> trajectory
+    </a>
+    <a href="#" class="nav-link">
+      <span class="icon">☽</span> dream seed
+    </a>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <button class="capture-btn">+ new capture</button>
+  </div>
+</div>
+
+<!-- ── Main ────────────────────────────────────────────── -->
+<div class="main-wrap">
+  <div class="main-content">
+    <div class="page-date">Saturday · March 21, 2026</div>
+    <div class="page-title">good morning.</div>
+
+    <!-- recent captures -->
+    <div class="note-stream-label">recent captures</div>
+
+    <div class="capture-strip mb-4">
+      <div class="capture-thumb">
+        🎙
+        <span class="thumb-label">07:14</span>
+      </div>
+      <div class="capture-thumb">
+        🎙
+        <span class="thumb-label">yesterday</span>
+      </div>
+      <div class="capture-thumb" style="font-size:13px; color:var(--slate);">
+        ⊡
+        <span class="thumb-label">photo</span>
+      </div>
+      <div class="capture-thumb" style="background:rgba(122,158,126,0.1); border-style:dashed; border-color:var(--matcha-2); color:var(--matcha-dim); font-size:20px;">
+        +
+      </div>
+    </div>
+
+    <hr class="zen-divider">
+
+    <!-- stream -->
+    <div class="note-stream-label">note stream</div>
+
+    <!-- Today -->
+    <div class="stream-day-sep">today</div>
+
+    <div class="note-card type-voice">
+      <div class="note-card-meta">
+        <span class="note-type-tag tag-voice">voice</span>
+        <span class="note-time">07:14</span>
+      </div>
+      <div class="note-preview">
+        woke up with the image of the ridge again — that same slope, the dry grass, something about standing at the edge and not being afraid. felt like a continuation but also a resolution...
+      </div>
+      <div class="note-themes">
+        <span class="theme-chip matched">Dreams as Inner Maps</span>
+        <span class="theme-chip matched">Body/Somatic Truth</span>
+      </div>
+    </div>
+
+    <div class="note-card type-text">
+      <div class="note-card-meta">
+        <span class="note-type-tag tag-text">note</span>
+        <span class="note-time">06:52</span>
+      </div>
+      <div class="note-preview">
+        the tension between logos and eros keeps showing up in how I relate to the work. the analytical holds, but something else needs to lead.
+      </div>
+      <div class="note-themes">
+        <span class="theme-chip matched">Logos/Eros/Wholeness</span>
+        <span class="theme-chip">Self-Authorship</span>
+      </div>
+    </div>
+
+    <!-- Yesterday -->
+    <div class="stream-day-sep">yesterday</div>
+
+    <div class="note-card type-dream">
+      <div class="note-card-meta">
+        <span class="note-type-tag tag-dream">dream</span>
+        <span class="note-time">Fri · 08:30</span>
+      </div>
+      <div class="note-preview">
+        a library with no ceiling. the books were arranged not by subject but by the feeling they produced. I knew exactly where to go.
+      </div>
+      <div class="note-themes">
+        <span class="theme-chip matched">Dreams as Inner Maps</span>
+        <span class="theme-chip">Psyche in Transition</span>
+      </div>
+    </div>
+
+    <div class="note-card type-voice">
+      <div class="note-card-meta">
+        <span class="note-type-tag tag-voice">voice</span>
+        <span class="note-time">Fri · 22:17</span>
+      </div>
+      <div class="note-preview">
+        late night — something about the music session earlier, how the piece came together in a way I didn't plan. the hands knew before the mind.
+      </div>
+      <div class="note-themes">
+        <span class="theme-chip matched">Music as Self-Discovery</span>
+      </div>
+    </div>
+
+    <div class="note-card type-text">
+      <div class="note-card-meta">
+        <span class="note-type-tag tag-text">note</span>
+        <span class="note-time">Fri · 14:05</span>
+      </div>
+      <div class="note-preview">
+        grief doesn't announce itself. it just shows up as weight in the chest during an ordinary afternoon. no trigger. just there.
+      </div>
+      <div class="note-themes">
+        <span class="theme-chip matched">Grief/Tears</span>
+        <span class="theme-chip">Body/Somatic Truth</span>
+      </div>
+    </div>
+
+    <hr class="zen-divider">
+    <div class="stream-day-sep">march 19</div>
+
+    <div class="note-card type-voice">
+      <div class="note-card-meta">
+        <span class="note-type-tag tag-voice">voice</span>
+        <span class="note-time">Thu · 09:03</span>
+      </div>
+      <div class="note-preview">
+        thinking about belonging — not to a place, but to a way of being. does that even make sense? a place I carry rather than arrive at.
+      </div>
+      <div class="note-themes">
+        <span class="theme-chip matched">Belonging/Place</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right panel ───────────────────────────────────── -->
+  <div class="right-panel">
+
+    <div class="panel-section">
+      <div class="panel-label">life arc · now</div>
+      <div class="life-arc-snippet">
+        Early March brought a <em>settling</em> — less urgent searching, more willingness to let things be incomplete. The work is still present but the grip has loosened.
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">themes · all time</div>
+
+      <div class="theme-row">
+        <span class="theme-row-name">Psyche in Transition</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:88%"></div></div>
+        <span class="theme-count">52</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Dreams as Inner Maps</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:74%"></div></div>
+        <span class="theme-count">44</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Logos/Eros/Wholeness</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:62%"></div></div>
+        <span class="theme-count">37</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Self-Authorship</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:55%"></div></div>
+        <span class="theme-count">33</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Music · Self-Discovery</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:40%"></div></div>
+        <span class="theme-count">24</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Body/Somatic Truth</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:35%"></div></div>
+        <span class="theme-count">21</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Belonging/Place</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:28%"></div></div>
+        <span class="theme-count">17</span>
+      </div>
+      <div class="theme-row">
+        <span class="theme-row-name">Grief/Tears</span>
+        <div class="theme-bar-wrap"><div class="theme-bar-fill" style="width:20%"></div></div>
+        <span class="theme-count">12</span>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">resonant segments</div>
+      <div class="d-flex gap-3" style="margin-bottom:10px;">
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:300; color:var(--charcoal);">188</div>
+          <div style="font-size:9px; letter-spacing:0.1em; color:var(--matcha-dim);">◉ mirror</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:300; color:var(--charcoal);">135</div>
+          <div style="font-size:9px; letter-spacing:0.1em; color:var(--slate);">◈ catalyst</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:300; color:var(--charcoal);">66</div>
+          <div style="font-size:9px; letter-spacing:0.1em; color:var(--slate-2);">☽ dreams</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">quick open</div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <a href="mockup_workspace.html" style="font-size:11px; color:var(--matcha-dim); text-decoration:none; padding:8px 12px; border:1px solid rgba(122,158,126,0.3); display:block; transition:all 0.15s;"
+           onmouseover="this.style.background='rgba(122,158,126,0.08)'"
+           onmouseout="this.style.background='transparent'">
+          ✦ &nbsp;open workspace
+        </a>
+        <a href="#" style="font-size:11px; color:var(--slate); text-decoration:none; padding:8px 12px; border:1px solid var(--chalk); display:block; transition:all 0.15s;"
+           onmouseover="this.style.background='rgba(0,0,0,0.03)'"
+           onmouseout="this.style.background='transparent'">
+          ⊹ &nbsp;trajectory seed
+        </a>
+        <a href="#" style="font-size:11px; color:var(--slate); text-decoration:none; padding:8px 12px; border:1px solid var(--chalk); display:block; transition:all 0.15s;"
+           onmouseover="this.style.background='rgba(0,0,0,0.03)'"
+           onmouseout="this.style.background='transparent'">
+          ☽ &nbsp;dream seed
+        </a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,162 @@
+@page "/stash"
+@using System.Text.Json
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+<div class="page-date">reference</div>
+<div class="page-title">stash</div>
+
+<!-- Quick add -->
+<div class="quick-capture" style="margin-bottom:24px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+        <input type="text" @bind="newTitle" placeholder="title or name..."
+               style="flex:2; min-width:150px; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:13px; color:var(--charcoal); padding:6px 0; outline:none;" />
+        <input type="text" @bind="newUrl" placeholder="url (optional)"
+               style="flex:3; min-width:200px; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal-2); padding:6px 0; outline:none;" />
+    </div>
+    <div style="display:flex; gap:8px; margin-top:8px; align-items:flex-end;">
+        <input type="text" @bind="newNote" placeholder="note (optional)"
+               style="flex:1; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal-2); padding:6px 0; outline:none;" />
+        <input type="text" @bind="newTags" placeholder="tags (comma separated)"
+               style="flex:1; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal-2); padding:6px 0; outline:none;" />
+        <button class="btn-zen primary" @onclick="CreateStash" disabled="@string.IsNullOrWhiteSpace(newTitle)">stash</button>
+    </div>
+</div>
+
+<!-- Search -->
+<div style="margin-bottom:16px;">
+    <input type="text" @bind="searchQuery" @bind:event="oninput" @bind:after="FilterStash" placeholder="search stash..."
+           style="width:100%; background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:12px; color:var(--charcoal); padding:8px 12px; outline:none;" />
+</div>
+
+@if (toast != null)
+{
+    <div class="toast-msg show">@toast</div>
+}
+
+<div class="note-stream-label">@filteredItems.Count items</div>
+
+@if (filteredItems.Count == 0)
+{
+    <div class="empty-state">
+        <div class="icon">⊡</div>
+        <p>@(allItems.Count == 0 ? "stash is empty." : "no matches.")</p>
+    </div>
+}
+else
+{
+    @foreach (var item in filteredItems)
+    {
+        var url = GetMeta(item, "url");
+        var tags = GetMetaTags(item);
+
+        <div class="note-card" @onclick="() => GoToEntity(item.Id)">
+            <div class="note-card-meta">
+                <span class="note-type-tag tag-stash">stash</span>
+                <span class="note-time">@item.CreatedAt.ToLocalTime().ToString("MMM d")</span>
+                @if (url != null)
+                {
+                    <a href="@url" target="_blank" @onclick:stopPropagation="true"
+                       style="font-size:9px; color:var(--matcha-dim); margin-left:auto;">↗ link</a>
+                }
+            </div>
+            <div class="note-title">@item.Title</div>
+            @if (item.Body != null)
+            {
+                <div class="note-preview">@item.Body</div>
+            }
+            @if (tags.Count > 0)
+            {
+                <div class="note-themes">
+                    @foreach (var tag in tags)
+                    {
+                        <span class="theme-chip">@tag</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<Entity> allItems = [];
+    private List<Entity> filteredItems = [];
+    private string searchQuery = "";
+    private string newTitle = "";
+    private string newUrl = "";
+    private string newNote = "";
+    private string newTags = "";
+    private string? toast;
+
+    private void GoToEntity(Guid id) => Nav.NavigateTo($"/entity/{id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadItems();
+    }
+
+    private async Task LoadItems()
+    {
+        allItems = await Svc.GetByType(EntityTypes.Stash);
+        FilterStash();
+    }
+
+    private void FilterStash()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredItems = allItems;
+            return;
+        }
+        var q = searchQuery.Trim().ToLower();
+        filteredItems = allItems.Where(e =>
+            (e.Title?.ToLower().Contains(q) == true) ||
+            (e.Body?.ToLower().Contains(q) == true) ||
+            GetMetaTags(e).Any(t => t.ToLower().Contains(q))
+        ).ToList();
+    }
+
+    private async Task CreateStash()
+    {
+        if (string.IsNullOrWhiteSpace(newTitle)) return;
+
+        var metaDict = new Dictionary<string, object>();
+        if (!string.IsNullOrWhiteSpace(newUrl))
+            metaDict["url"] = newUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(newTags))
+            metaDict["tags"] = newTags.Split(',').Select(t => t.Trim()).Where(t => t.Length > 0).ToArray();
+
+        JsonDocument? meta = metaDict.Count > 0
+            ? JsonDocument.Parse(JsonSerializer.Serialize(metaDict))
+            : null;
+
+        var body = string.IsNullOrWhiteSpace(newNote) ? null : newNote.Trim();
+        await Svc.Create(EntityTypes.Stash, newTitle.Trim(), body, meta);
+
+        newTitle = "";
+        newUrl = "";
+        newNote = "";
+        newTags = "";
+        await LoadItems();
+        toast = "stashed";
+        StateHasChanged();
+        await Task.Delay(1500);
+        toast = null;
+        StateHasChanged();
+    }
+
+    private string? GetMeta(Entity e, string key)
+    {
+        if (e.Meta == null) return null;
+        return e.Meta.RootElement.TryGetProperty(key, out var val) ? val.GetString() : null;
+    }
+
+    private List<string> GetMetaTags(Entity e)
+    {
+        if (e.Meta == null) return [];
+        if (!e.Meta.RootElement.TryGetProperty("tags", out var arr)) return [];
+        return arr.EnumerateArray().Select(v => v.GetString() ?? "").Where(s => s.Length > 0).ToList();
+    }
+}

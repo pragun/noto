@@ -1,0 +1,54 @@
+@page "/works"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+<div class="page-date">synthesis</div>
+<div class="page-title">works</div>
+
+<div style="margin-bottom:16px;">
+    <button class="btn-zen primary" @onclick="NewWork">+ new work</button>
+</div>
+
+<div class="note-stream-label">@works.Count works</div>
+
+@if (works.Count == 0)
+{
+    <div class="empty-state">
+        <div class="icon">⊹</div>
+        <p>no works yet.<br/>open the workspace to start writing.</p>
+    </div>
+}
+else
+{
+    @foreach (var w in works)
+    {
+        <div class="note-card" style="cursor:pointer;" @onclick="() => OpenWork(w.Id)">
+            <div class="note-card-meta">
+                <span class="note-type-tag tag-stash">work</span>
+                <span class="note-time">@w.UpdatedAt.ToLocalTime().ToString("MMM d, HH:mm")</span>
+            </div>
+            <div class="note-title">@(w.Title ?? "(untitled)")</div>
+            @if (w.Body != null)
+            {
+                <div class="note-preview">@Truncate(w.Body, 200)</div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<Entity> works = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        works = await Svc.GetByType(EntityTypes.Capture);
+    }
+
+    private void NewWork() => Nav.NavigateTo("/workspace");
+    private void OpenWork(Guid id) => Nav.NavigateTo($"/workspace/{id}");
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+}

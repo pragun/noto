@@ -1,0 +1,37 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Node (for Milkdown build)
+node_modules/
+package-lock.json
+
+# Secrets
+.env
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+
+# IDE
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (never in repo)
+noto-data/
+
+# Origin data (symlink to chatgpt export, contains secrets)
+origin/
+
+# Generated audio demos
+src/Noto.Server/wwwroot/audio/*.aiff
+
+# EF migrations designer snapshot (auto-generated, can be large)
+# Keep migrations themselves

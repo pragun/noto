@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <EfCoreVersion>9.0.1</EfCoreVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Force all projects to use the same EF Core version -->
+    <PackageReference Update="Microsoft.EntityFrameworkCore" Version="$(EfCoreVersion)" />
+    <PackageReference Update="Microsoft.EntityFrameworkCore.Abstractions" Version="$(EfCoreVersion)" />
+    <PackageReference Update="Microsoft.EntityFrameworkCore.Relational" Version="$(EfCoreVersion)" />
+  </ItemGroup>
+</Project>

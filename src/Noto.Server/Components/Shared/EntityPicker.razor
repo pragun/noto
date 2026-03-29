@@ -1,0 +1,171 @@
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService EntitySvc
+@inject EmbeddingService EmbSvc
+
+<div class="ep-wrap">
+    <div class="ep-input-row">
+        <input type="text" @bind="query" @bind:event="oninput" @bind:after="OnQueryChanged"
+               @onkeydown="OnKeyDown" @onfocus="OnFocus"
+               placeholder="@Placeholder" class="ep-input" />
+        <div class="ep-mode-toggle">
+            <button class="@(mode == "semantic" ? "active" : "")" @onclick='() => SetMode("semantic")' title="search by meaning">◎</button>
+            <button class="@(mode == "text" ? "active" : "")" @onclick='() => SetMode("text")' title="search by keyword">T</button>
+        </div>
+    </div>
+
+    @if (showResults && results.Count > 0)
+    {
+        <div class="ep-results">
+            @foreach (var r in results)
+            {
+                <div class="ep-result @(IsAlreadySelected(r.Id) ? "disabled" : "")"
+                     @onclick="() => Pick(r)">
+                    <div class="ep-result-meta">
+                        <span class="note-type-tag @GetTagClass(r.Type)">@r.Type</span>
+                        @if (IsAlreadySelected(r.Id))
+                        {
+                            <span style="font-size:8px; color:var(--matcha-dim); margin-left:auto;">already tagged</span>
+                        }
+                    </div>
+                    @if (r.Title != null)
+                    {
+                        <div class="ep-result-title">@r.Title</div>
+                    }
+                    @if (r.Body != null)
+                    {
+                        <div class="ep-result-body">@Truncate(r.Body, 120)</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else if (showResults && searching)
+    {
+        <div class="ep-results">
+            <div class="ep-status">searching...</div>
+        </div>
+    }
+    else if (showResults && !string.IsNullOrWhiteSpace(query) && !searching)
+    {
+        <div class="ep-results">
+            <div class="ep-status">no results</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Placeholder { get; set; } = "search to add...";
+    [Parameter] public string? FilterType { get; set; }
+    [Parameter] public HashSet<Guid> ExcludeIds { get; set; } = [];
+    [Parameter] public EventCallback<Entity> OnPicked { get; set; }
+
+    private string query = "";
+    private string mode = "semantic";
+    private bool showResults;
+    private bool searching;
+    private List<Entity> results = [];
+    private System.Timers.Timer? debounceTimer;
+
+    private void OnFocus() => showResults = true;
+
+    private void SetMode(string m)
+    {
+        mode = m;
+        if (!string.IsNullOrWhiteSpace(query))
+            _ = DoSearch();
+    }
+
+    private void OnQueryChanged()
+    {
+        showResults = true;
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            results = [];
+            return;
+        }
+
+        debounceTimer = new System.Timers.Timer(350);
+        debounceTimer.AutoReset = false;
+        debounceTimer.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await DoSearch();
+                StateHasChanged();
+            });
+        };
+        debounceTimer.Start();
+    }
+
+    private async Task DoSearch()
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+
+        searching = true;
+        StateHasChanged();
+
+        try
+        {
+            if (mode == "semantic")
+            {
+                var provider = await EmbSvc.GetActiveProvider();
+                if (provider != null)
+                {
+                    var semantic = await EmbSvc.SearchSemantic(query, provider, 12);
+                    results = semantic.Select(r => r.Entity).ToList();
+                }
+            }
+            else
+            {
+                results = await EntitySvc.SearchText(query, 12);
+            }
+
+            if (FilterType != null)
+                results = results.Where(r => r.Type == FilterType).ToList();
+        }
+        catch
+        {
+            results = [];
+        }
+        finally
+        {
+            searching = false;
+        }
+    }
+
+    private async Task Pick(Entity entity)
+    {
+        if (IsAlreadySelected(entity.Id)) return;
+        await OnPicked.InvokeAsync(entity);
+        query = "";
+        results = [];
+        showResults = false;
+    }
+
+    private void OnKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            showResults = false;
+            query = "";
+            results = [];
+        }
+    }
+
+    private bool IsAlreadySelected(Guid id) => ExcludeIds.Contains(id);
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+
+    private string GetTagClass(string type) => type switch
+    {
+        "capture" => "tag-capture",
+        "thread" => "tag-thread",
+        "stash" => "tag-stash",
+        _ => ""
+    };
+}

@@ -1,0 +1,49 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: noto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: noto
+      POSTGRES_PASSWORD: noto
+      POSTGRES_DB: noto
+    ports:
+      - "5433:5432"   # host port 5433 for dev (CLI, dotnet run); containers use db:5432
+    volumes:
+      - ${NOTO_DATA:-~/noto-data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noto"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama
+    container_name: noto-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"   # host port for dev; containers use ollama:11434
+    volumes:
+      - ${NOTO_DATA:-~/noto-data}/ollama:/root/.ollama
+    # Apple Silicon: runs on CPU in Docker, still fast for embedding models
+    # Pull models after first start: docker exec noto-ollama ollama pull mxbai-embed-large
+
+  app:
+    build:
+      context: .
+      dockerfile: src/Noto.Server/Dockerfile
+    container_name: noto-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5000:8080"
+    environment:
+      ConnectionStrings__Noto: "Host=db;Database=noto;Username=noto;Password=noto"
+      Storage__MediaRoot: /data/media
+      Embeddings__Endpoint: "http://ollama:11434/v1/embeddings"
+      OpenRouter__ApiKey: ${OPENROUTER_KEY:-}
+      Whisper__ApiKey: ${OPENAI_KEY:-}
+    volumes:
+      - ${NOTO_DATA:-~/noto-data}/media:/data/media

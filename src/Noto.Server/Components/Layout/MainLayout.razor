@@ -1,0 +1,84 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+@using Noto.Server.Components.Shared
+
+<div class="sidebar">
+    <div class="sidebar-brand">
+        <div class="app-name">noto</div>
+        <div class="app-sub">personal archive</div>
+    </div>
+
+    <div class="nav-section-label">capture</div>
+    <nav class="sidebar-nav">
+        <NavLink href="/" Match="NavLinkMatch.All">
+            <span class="icon">▦</span> stream
+        </NavLink>
+    </nav>
+
+    <div class="nav-section-label">organize</div>
+    <nav class="sidebar-nav">
+        <NavLink href="/threads">
+            <span class="icon">∿</span> threads
+        </NavLink>
+        <NavLink href="/stash">
+            <span class="icon">⊡</span> stash
+        </NavLink>
+    </nav>
+
+    <div class="nav-section-label">converse</div>
+    <nav class="sidebar-nav">
+        <NavLink href="/workspace">
+            <span class="icon">✦</span> chat
+        </NavLink>
+        <NavLink href="/annotate">
+            <span class="icon">♫</span> annotate
+        </NavLink>
+    </nav>
+
+    <div class="nav-section-label">find</div>
+    <nav class="sidebar-nav">
+        <a href="#" @onclick="OpenSearch" @onclick:preventDefault>
+            <span class="icon">⌕</span> search
+            <span style="margin-left:auto; font-size:9px; color:var(--slate); opacity:0.6;">⌘K</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+        <NavLink href="/capture" class="capture-btn" style="text-align:center; text-decoration:none;">
+            + new capture
+        </NavLink>
+    </div>
+</div>
+
+<div class="main-wrap">
+    <div class="main-content">
+        @Body
+    </div>
+</div>
+
+<SearchOverlay @ref="searchOverlay" />
+
+@code {
+    private SearchOverlay? searchOverlay;
+
+    private void OpenSearch()
+    {
+        searchOverlay?.Open();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("noto.registerSearchShortcut",
+                DotNetObjectReference.Create(this));
+        }
+    }
+
+    [JSInvokable]
+    public void OnSearchShortcut()
+    {
+        searchOverlay?.Toggle();
+        StateHasChanged();
+    }
+}

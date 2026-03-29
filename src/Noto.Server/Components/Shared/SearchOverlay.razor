@@ -1,0 +1,183 @@
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService EntitySvc
+@inject EmbeddingService EmbSvc
+@inject NavigationManager Nav
+
+@if (isOpen)
+{
+    <div class="search-backdrop" @onclick="Close"></div>
+    <div class="search-overlay">
+        <div class="search-input-row">
+            <span class="search-icon">⌕</span>
+            <input type="text" @ref="searchInput" @bind="query" @bind:event="oninput"
+                   @bind:after="OnQueryChanged" @onkeydown="OnKeyDown"
+                   placeholder="search by meaning..." autofocus />
+            <div class="search-mode-toggle">
+                <button class="@(mode == "semantic" ? "active" : "")" @onclick='() => SetMode("semantic")'>semantic</button>
+                <button class="@(mode == "text" ? "active" : "")" @onclick='() => SetMode("text")'>text</button>
+            </div>
+        </div>
+
+        @if (searching)
+        {
+            <div class="search-status">searching...</div>
+        }
+
+        @if (results.Count > 0)
+        {
+            <div class="search-results">
+                @foreach (var r in results)
+                {
+                    <div class="search-result" @onclick="() => GoTo(r.Id)">
+                        <div class="search-result-meta">
+                            <span class="note-type-tag @GetTagClass(r.Type)">@r.Type</span>
+                            <span class="search-result-time">@r.CreatedAt.ToLocalTime().ToString("MMM d")</span>
+                        </div>
+                        @if (r.Title != null)
+                        {
+                            <div class="search-result-title">@r.Title</div>
+                        }
+                        @if (r.Body != null)
+                        {
+                            <div class="search-result-body">@Truncate(r.Body, 140)</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (!searching && !string.IsNullOrWhiteSpace(query))
+        {
+            <div class="search-status">no results</div>
+        }
+
+        <div class="search-hint">
+            esc to close · tab to switch mode
+        </div>
+    </div>
+}
+
+@code {
+    private bool isOpen;
+    private string query = "";
+    private string mode = "semantic";
+    private bool searching;
+    private List<Entity> results = [];
+    private ElementReference searchInput;
+    private System.Timers.Timer? debounceTimer;
+
+    public void Toggle()
+    {
+        isOpen = !isOpen;
+        if (!isOpen)
+        {
+            query = "";
+            results = [];
+        }
+        StateHasChanged();
+    }
+
+    public void Open()
+    {
+        isOpen = true;
+        query = "";
+        results = [];
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        isOpen = false;
+        query = "";
+        results = [];
+        StateHasChanged();
+    }
+
+    private void SetMode(string m)
+    {
+        mode = m;
+        if (!string.IsNullOrWhiteSpace(query))
+            _ = DoSearch();
+    }
+
+    private void OnQueryChanged()
+    {
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+        debounceTimer = new System.Timers.Timer(400);
+        debounceTimer.AutoReset = false;
+        debounceTimer.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await DoSearch();
+                StateHasChanged();
+            });
+        };
+        debounceTimer.Start();
+    }
+
+    private async Task DoSearch()
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            results = [];
+            return;
+        }
+
+        searching = true;
+        StateHasChanged();
+
+        try
+        {
+            if (mode == "semantic")
+            {
+                var provider = await EmbSvc.GetActiveProvider();
+                if (provider != null)
+                {
+                    var semantic = await EmbSvc.SearchSemantic(query, provider, 15);
+                    results = semantic.Select(r => r.Entity).ToList();
+                }
+            }
+            else
+            {
+                results = await EntitySvc.SearchText(query, 15);
+            }
+        }
+        catch
+        {
+            results = [];
+        }
+        finally
+        {
+            searching = false;
+        }
+    }
+
+    private void OnKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Close();
+        if (e.Key == "Tab")
+        {
+            SetMode(mode == "semantic" ? "text" : "semantic");
+        }
+    }
+
+    private void GoTo(Guid id)
+    {
+        Close();
+        Nav.NavigateTo($"/entity/{id}");
+    }
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+
+    private string GetTagClass(string type) => type switch
+    {
+        "capture" => "tag-capture",
+        "thread" => "tag-thread",
+        "stash" => "tag-stash",
+        "work" => "tag-stash",
+        _ => ""
+    };
+}

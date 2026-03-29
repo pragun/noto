@@ -1,0 +1,243 @@
+@page "/entity/{Id:guid}"
+@using Markdig
+@using Microsoft.AspNetCore.Components
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@using Noto.Server.Components.Shared
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+@if (entity == null)
+{
+    <div class="empty-state">
+        <p>not found</p>
+    </div>
+}
+else
+{
+    <div class="detail-header">
+        <div class="detail-type">@entity.Type</div>
+        @if (entity.Title != null)
+        {
+            <div class="detail-title">@entity.Title</div>
+        }
+        <div style="font-size:10px; color:var(--slate-2); margin-top:4px;">
+            @entity.Id &middot; @entity.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+        </div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:20px;">
+        <button class="btn-zen" @onclick="GoBack">back</button>
+        <button class="btn-zen" @onclick="StartEdit">edit</button>
+        <button class="btn-zen danger" @onclick="ConfirmDelete">
+            @(confirmingDelete ? "confirm delete" : "delete")
+        </button>
+    </div>
+
+    @if (editing)
+    {
+        <div class="quick-capture" style="margin-bottom:16px;">
+            <input type="text" @bind="editTitle" placeholder="title"
+                   style="width:100%; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:14px; color:var(--charcoal); padding:6px 0; outline:none; margin-bottom:10px;" />
+            <textarea @bind="editBody" rows="8" style="width:100%; background:transparent; border:none; font-family:inherit; font-size:13px; color:var(--charcoal); outline:none; line-height:1.8; resize:vertical;"></textarea>
+            <div class="quick-capture-actions">
+                <button class="btn-zen" @onclick="CancelEdit">cancel</button>
+                <button class="btn-zen primary" @onclick="SaveEdit">save</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if (entity.Body != null)
+        {
+            <div class="detail-body">@RenderMarkdown(entity.Body)</div>
+        }
+    }
+
+    <!-- Thread tags -->
+    <div style="margin-top:20px;">
+        <div class="note-stream-label">threads</div>
+        <div class="note-themes" style="margin-bottom:8px;">
+            @foreach (var link in entity.LinksFrom.Where(l => l.Reason == "tagged" && l.To != null))
+            {
+                <span class="theme-chip" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                    <span @onclick="() => GoTo(link.ToId)">@link.To.Title</span>
+                    <span @onclick="() => RemoveTag(link.Id)" style="color:var(--slate); cursor:pointer; font-size:11px;" title="untag">&times;</span>
+                </span>
+            }
+        </div>
+        <EntityPicker Placeholder="search threads to add..."
+                      FilterType="thread"
+                      ExcludeIds="taggedThreadIds"
+                      OnPicked="OnThreadPicked" />
+    </div>
+
+    <!-- Ad-hoc links -->
+    <div style="margin-top:20px;">
+        <div class="note-stream-label">links</div>
+
+        @{
+            var nonTagLinks = entity.LinksFrom.Where(l => l.Reason != "tagged").ToList();
+            var inboundLinks = entity.LinksTo.ToList();
+        }
+
+        @if (nonTagLinks.Count > 0 || inboundLinks.Count > 0)
+        {
+            @foreach (var link in nonTagLinks)
+            {
+                <div class="note-card" style="display:flex; align-items:center; gap:8px;" @onclick="() => GoTo(link.ToId)">
+                    <div style="flex:1;">
+                        <div class="note-card-meta">
+                            <span class="note-type-tag">→ @(link.Reason ?? "link")</span>
+                            <span class="note-type-tag @GetTagClass(link.To.Type)">@link.To.Type</span>
+                        </div>
+                        <div class="note-preview">@(link.To.Title ?? Truncate(link.To.Body ?? "", 100))</div>
+                    </div>
+                    <span @onclick:stopPropagation="true" @onclick="() => RemoveLink(link.Id)"
+                          style="color:var(--slate); cursor:pointer; font-size:13px; padding:4px;" title="remove link">&times;</span>
+                </div>
+            }
+            @foreach (var link in inboundLinks)
+            {
+                <div class="note-card" @onclick="() => GoTo(link.FromId)">
+                    <div class="note-card-meta">
+                        <span class="note-type-tag">← @(link.Reason ?? "link")</span>
+                        <span class="note-type-tag @GetTagClass(link.From.Type)">@link.From.Type</span>
+                    </div>
+                    <div class="note-preview">@(link.From.Title ?? Truncate(link.From.Body ?? "", 100))</div>
+                </div>
+            }
+        }
+
+        <div style="margin-top:8px; display:flex; gap:6px; align-items:flex-end;">
+            <div style="flex:1;">
+                <EntityPicker Placeholder="search to link..."
+                              ExcludeIds="allLinkedIds"
+                              OnPicked="OnLinkPicked" />
+            </div>
+            <input type="text" @bind="linkReason" placeholder="reason (optional)"
+                   style="width:120px; background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:10px; color:var(--charcoal); padding:6px 8px; outline:none;" />
+        </div>
+    </div>
+
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Entity? entity;
+    private bool editing = false;
+    private string editTitle = "";
+    private string editBody = "";
+    private bool confirmingDelete = false;
+    private HashSet<Guid> taggedThreadIds = [];
+    private HashSet<Guid> allLinkedIds = [];
+    private string linkReason = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        entity = await Svc.GetById(Id);
+        UpdateLinkedIds();
+    }
+
+    private void UpdateLinkedIds()
+    {
+        taggedThreadIds = entity?.LinksFrom
+            .Where(l => l.Reason == "tagged")
+            .Select(l => l.ToId)
+            .ToHashSet() ?? [];
+
+        allLinkedIds = new HashSet<Guid>();
+        if (entity != null)
+        {
+            allLinkedIds.Add(entity.Id); // exclude self
+            foreach (var l in entity.LinksFrom) allLinkedIds.Add(l.ToId);
+            foreach (var l in entity.LinksTo) allLinkedIds.Add(l.FromId);
+        }
+    }
+
+    private async Task OnThreadPicked(Entity thread)
+    {
+        if (entity == null) return;
+        await Svc.TagCapture(entity.Id, thread.Id);
+        entity = await Svc.GetById(Id);
+        UpdateLinkedIds();
+    }
+
+    private async Task OnLinkPicked(Entity target)
+    {
+        if (entity == null) return;
+        var reason = string.IsNullOrWhiteSpace(linkReason) ? null : linkReason.Trim();
+        await Svc.CreateLink(entity.Id, target.Id, reason);
+        linkReason = "";
+        entity = await Svc.GetById(Id);
+        UpdateLinkedIds();
+    }
+
+    private async Task RemoveTag(Guid linkId)
+    {
+        await Svc.DeleteLink(linkId);
+        entity = await Svc.GetById(Id);
+        UpdateLinkedIds();
+    }
+
+    private async Task RemoveLink(Guid linkId)
+    {
+        await Svc.DeleteLink(linkId);
+        entity = await Svc.GetById(Id);
+        UpdateLinkedIds();
+    }
+
+    private void StartEdit()
+    {
+        editTitle = entity?.Title ?? "";
+        editBody = entity?.Body ?? "";
+        editing = true;
+    }
+
+    private void CancelEdit() => editing = false;
+
+    private async Task SaveEdit()
+    {
+        if (entity == null) return;
+        var title = string.IsNullOrWhiteSpace(editTitle) ? null : editTitle.Trim();
+        await Svc.Update(entity.Id, title: title, body: editBody.Trim());
+        entity = await Svc.GetById(Id);
+        editing = false;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (!confirmingDelete)
+        {
+            confirmingDelete = true;
+            return;
+        }
+        await Svc.Delete(Id);
+        Nav.NavigateTo("/");
+    }
+
+    private void GoTo(Guid id) => Nav.NavigateTo($"/entity/{id}");
+    private void GoBack() => Nav.NavigateTo("/");
+
+    private static readonly MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    private MarkupString RenderMarkdown(string markdown)
+    {
+        var html = Markdown.ToHtml(markdown, _mdPipeline);
+        return new MarkupString(html);
+    }
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+
+    private string GetTagClass(string type) => type switch
+    {
+        "capture" => "tag-capture",
+        "thread" => "tag-thread",
+        "stash" => "tag-stash",
+        _ => ""
+    };
+}

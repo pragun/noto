@@ -1,0 +1,318 @@
+@page "/workspace"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@using Noto.Server.Components.Shared
+@using Markdig
+@using Microsoft.AspNetCore.Components
+@inject EntityService Svc
+@inject AiConversationService AiSvc
+@inject NavigationManager Nav
+
+<div class="ws-layout">
+
+    <!-- LEFT: Seed Panel -->
+    <div class="ws-seed-panel">
+        <div class="ws-seed-header">
+            <div class="ws-seed-title">context seeds</div>
+            <select @bind="selectedThreadId" @bind:after="LoadThreadCaptures"
+                    style="width:100%; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.08); color:var(--parchment); font-family:inherit; font-size:11px; padding:4px 8px; outline:none; margin-top:8px;">
+                <option value="">all captures</option>
+                @foreach (var t in threads)
+                {
+                    <option value="@t.Id">@t.Title</option>
+                }
+            </select>
+        </div>
+
+        @if (injectedSeeds.Count > 0)
+        {
+            <div style="padding:8px 16px; border-bottom:1px solid rgba(255,255,255,0.07); font-size:9px; color:var(--matcha-2); letter-spacing:0.1em;">
+                @injectedSeeds.Count SEEDS ACTIVE
+                <span style="cursor:pointer; float:right; color:var(--slate);" @onclick="() => injectedSeeds.Clear()">clear</span>
+            </div>
+        }
+
+        <div class="ws-seed-scroll">
+            @foreach (var cap in seedCaptures)
+            {
+                var isInjected = injectedSeeds.Any(s => s.Id == cap.Id);
+                <div class="ws-seed-item @(isInjected ? "injected" : "")" @onclick="() => ToggleSeed(cap)">
+                    <div class="ws-seed-item-meta">
+                        <span style="font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:@(isInjected ? "var(--matcha-2)" : "var(--slate)");">
+                            @(isInjected ? "✓ injected" : cap.Type)
+                        </span>
+                    </div>
+                    @if (cap.Title != null)
+                    {
+                        <div class="ws-seed-item-title">@cap.Title</div>
+                    }
+                    <div class="ws-seed-item-quote">@Truncate(cap.Body ?? "", 150)</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- CENTER: Chat -->
+    <div class="ws-composer">
+        <div class="ws-topbar">
+            <div style="font-size:12px; color:var(--charcoal); font-weight:500; letter-spacing:0.02em;">
+                @if (chatEntityId == null)
+                {
+                    <span style="color:var(--slate);">new conversation</span>
+                }
+                else
+                {
+                    <span>@chatTitle</span>
+                    <span style="font-size:9px; color:var(--slate-2); margin-left:8px;">@chatEntityId.Value.ToString()[..8]</span>
+                }
+            </div>
+            <div class="ws-topbar-actions">
+                @if (chatEntityId != null)
+                {
+                    <button class="btn-zen" @onclick="ViewTranscript">view note</button>
+                }
+                @if (exchanges.Count > 0)
+                {
+                    <button class="btn-zen" @onclick="NewChat">new chat</button>
+                }
+            </div>
+        </div>
+
+        @if (injectedSeeds.Count > 0)
+        {
+            <div class="ws-context-bar">
+                <div class="ws-context-label">@injectedSeeds.Count seeds as context</div>
+                @foreach (var seed in injectedSeeds)
+                {
+                    <div class="ws-context-item">
+                        <span class="ws-context-tag">@Truncate(seed.Title ?? "untitled", 25)</span>
+                        @Truncate(seed.Body ?? "", 80)
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="ws-editor-scroll">
+
+            @if (exchanges.Count == 0 && !isStreaming)
+            {
+                <div class="empty-state" style="padding:40px 20px;">
+                    <div class="icon">✦</div>
+                    <p>inject seeds from the left panel for context,<br/>then start a conversation below.</p>
+                </div>
+            }
+
+            @for (int i = 0; i < exchanges.Count; i++)
+            {
+                var exchange = exchanges[i];
+                var idx = i;
+
+                <div class="ws-user-msg">
+                    <div class="ws-msg-label">you</div>
+                    <div class="ws-msg-text" style="white-space:pre-wrap;">@exchange.UserMessage</div>
+                </div>
+
+                <div class="ws-ai-response">
+                    <div class="ws-msg-label">claude</div>
+                    <div class="ws-msg-text detail-body">@RenderMarkdown(exchange.AiResponse)</div>
+
+                    @if (exchange.SavedNoteId == null)
+                    {
+                        <div class="ws-ai-actions">
+                            <button class="ws-ai-action" @onclick="() => SaveResponseAsNote(idx)">
+                                save to notes
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="ws-ai-actions">
+                            <span style="font-size:9px; color:var(--matcha-dim);">
+                                ✓ saved
+                            </span>
+                            <button class="ws-ai-action" @onclick="() => GoToNote(exchange.SavedNoteId.Value)">
+                                @exchange.SavedNoteId.Value.ToString()[..8] → open
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (isStreaming)
+            {
+                <div class="ws-user-msg">
+                    <div class="ws-msg-label">you</div>
+                    <div class="ws-msg-text" style="white-space:pre-wrap;">@currentUserMsg</div>
+                </div>
+                <div class="ws-ai-response streaming">
+                    <div class="ws-msg-label">claude</div>
+                    <div class="ws-msg-text detail-body">@RenderMarkdown(streamingContent)</div>
+                </div>
+            }
+        </div>
+
+        <!-- Prompt bar -->
+        <div class="ws-prompt-bar">
+            <textarea @bind="promptText" @bind:event="oninput" @onkeydown="OnPromptKeyDown"
+                      placeholder="reflect, ask, explore..." rows="2"
+                      class="ws-prompt-input"></textarea>
+            <button class="ws-prompt-send" @onclick="SendPrompt"
+                    disabled="@(isStreaming || string.IsNullOrWhiteSpace(promptText))">
+                send
+            </button>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private List<Entity> threads = [];
+    private string selectedThreadId = "";
+    private List<Entity> seedCaptures = [];
+    private List<Entity> injectedSeeds = [];
+
+    private string chatTitle = "";
+    private Guid? chatEntityId;
+    private string promptText = "";
+    private bool isStreaming;
+    private string streamingContent = "";
+    private string currentUserMsg = "";
+
+    private List<Exchange> exchanges = [];
+    private List<OpenRouterClient.ChatMessage> conversationHistory = [];
+
+    private class Exchange
+    {
+        public string UserMessage { get; set; } = "";
+        public string AiResponse { get; set; } = "";
+        public Guid? SavedNoteId { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        threads = await Svc.GetByType(EntityTypes.Thread);
+        await LoadThreadCaptures();
+    }
+
+    private async Task LoadThreadCaptures()
+    {
+        if (string.IsNullOrEmpty(selectedThreadId))
+            seedCaptures = await Svc.GetStream(0, 50, EntityTypes.Capture);
+        else
+            seedCaptures = await Svc.GetThreadCaptures(Guid.Parse(selectedThreadId), 50);
+    }
+
+    private void ToggleSeed(Entity cap)
+    {
+        if (injectedSeeds.Any(s => s.Id == cap.Id))
+            injectedSeeds.RemoveAll(s => s.Id == cap.Id);
+        else
+            injectedSeeds.Add(cap);
+    }
+
+    private async Task SendPrompt()
+    {
+        if (string.IsNullOrWhiteSpace(promptText) || isStreaming) return;
+
+        currentUserMsg = promptText.Trim();
+        promptText = "";
+        isStreaming = true;
+        streamingContent = "";
+        StateHasChanged();
+
+        if (string.IsNullOrWhiteSpace(chatTitle) && exchanges.Count == 0)
+        {
+            chatTitle = currentUserMsg.Length > 60
+                ? currentUserMsg[..57] + "..."
+                : currentUserMsg;
+        }
+
+        var seeds = injectedSeeds
+            .Select(s => (s.Title ?? "untitled", s.Body ?? ""))
+            .ToList();
+
+        var systemPrompt = AiSvc.BuildSystemPromptWithSeeds(seeds);
+
+        try
+        {
+            await foreach (var token in AiSvc.StreamResponse(systemPrompt, conversationHistory, currentUserMsg))
+            {
+                streamingContent += token;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            streamingContent += $"\n\n[Error: {ex.Message}]";
+        }
+
+        conversationHistory.Add(new OpenRouterClient.ChatMessage("user", currentUserMsg));
+        conversationHistory.Add(new OpenRouterClient.ChatMessage("assistant", streamingContent));
+        exchanges.Add(new Exchange { UserMessage = currentUserMsg, AiResponse = streamingContent });
+
+        isStreaming = false;
+        currentUserMsg = "";
+
+        // Auto-save transcript after every exchange
+        await AutoSaveTranscript();
+
+        streamingContent = "";
+        StateHasChanged();
+    }
+
+    private void OnPromptKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.MetaKey || e.CtrlKey))
+            _ = SendPrompt();
+    }
+
+    private async Task AutoSaveTranscript()
+    {
+        var body = string.Join("\n\n---\n\n", exchanges.Select(e =>
+            $"**You:**\n{e.UserMessage}\n\n**Claude:**\n{e.AiResponse}"));
+
+        var title = chatTitle != "" ? chatTitle : $"chat · {DateTime.Now:MMM d HH:mm}";
+
+        if (chatEntityId == null)
+        {
+            var entity = await Svc.Create(EntityTypes.Chat, title, body);
+            chatEntityId = entity.Id;
+        }
+        else
+        {
+            await Svc.Update(chatEntityId.Value, title: title, body: body);
+        }
+    }
+
+    private async Task SaveResponseAsNote(int exchangeIdx)
+    {
+        var exchange = exchanges[exchangeIdx];
+        var title = chatTitle != "" ? $"from: {chatTitle}" : "AI reflection";
+        var entity = await Svc.Create(EntityTypes.Capture, title, exchange.AiResponse);
+        exchange.SavedNoteId = entity.Id;
+        StateHasChanged();
+    }
+
+    private void GoToNote(Guid id) => Nav.NavigateTo($"/entity/{id}");
+    private void ViewTranscript() => Nav.NavigateTo($"/entity/{chatEntityId}");
+
+    private void NewChat()
+    {
+        exchanges = [];
+        conversationHistory = [];
+        chatTitle = "";
+        chatEntityId = null;
+        promptText = "";
+        injectedSeeds.Clear();
+    }
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+
+    private static readonly MarkdownPipeline MdPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    private MarkupString RenderMarkdown(string md) =>
+        new(Markdown.ToHtml(md ?? "", MdPipeline));
+}

@@ -1,0 +1,395 @@
+@page "/annotate"
+@page "/annotate/{EntityId:guid}"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject IJSRuntime JS
+
+<div class="aa-layout">
+
+    <!-- LEFT: Annotation list -->
+    <div class="aa-annotations-panel">
+        <div class="aa-panel-header">
+            <div class="aa-panel-title">annotations</div>
+            <div style="font-size:10px; color:var(--slate-2); margin-top:4px;">
+                @annotations.Count notes
+            </div>
+        </div>
+
+        <div class="aa-annotations-scroll">
+            @foreach (var ann in annotations.OrderBy(a => a.TimeSec))
+            {
+                <div class="aa-annotation-item @(selectedAnnotation == ann ? "selected" : "")"
+                     @onclick="() => SeekToAnnotation(ann)">
+                    <div class="aa-annotation-time">@FormatTime(ann.TimeSec)</div>
+                    @if (ann.EndTimeSec.HasValue)
+                    {
+                        <span class="aa-annotation-range">→ @FormatTime(ann.EndTimeSec.Value)</span>
+                    }
+                    <div class="aa-annotation-text">@ann.Text</div>
+                </div>
+            }
+
+            @if (annotations.Count == 0)
+            {
+                <div style="padding:20px 16px; font-size:11px; color:var(--slate); text-align:center;">
+                    load audio, then click the waveform to set position and add notes
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- CENTER: Player + editor -->
+    <div class="aa-main">
+
+        <!-- Top bar -->
+        <div class="aa-topbar">
+            <input type="text" @bind="title" placeholder="session title..."
+                   class="ws-title-input" />
+            <div class="ws-topbar-actions">
+                <button class="btn-zen" @onclick="SaveSession">save</button>
+            </div>
+        </div>
+
+        <!-- Audio source -->
+        @if (!audioLoaded)
+        {
+            <div class="aa-load-panel">
+                <div style="font-size:9px; letter-spacing:0.15em; text-transform:uppercase; color:var(--slate); margin-bottom:12px;">
+                    load audio
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                    <input type="text" @bind="audioUrl" placeholder="paste audio URL..."
+                           style="flex:1; min-width:200px; background:transparent; border:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal); padding:6px 10px; outline:none;" />
+                    <button class="btn-zen primary" @onclick="LoadFromUrl" disabled="@string.IsNullOrWhiteSpace(audioUrl)">load</button>
+                </div>
+                <div style="margin-top:10px;">
+                    <InputFile OnChange="LoadFromFile" style="font-family:inherit; font-size:11px; color:var(--slate);" />
+                </div>
+                <div style="margin-top:14px; font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:var(--slate); margin-bottom:8px;">
+                    demos
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn-zen" style="font-size:10px; padding:4px 10px;" @onclick='() => LoadPreset("audio/field-notes.wav", "field notes · creek walk")'>
+                        🌿 field notes
+                    </button>
+                    <button class="btn-zen" style="font-size:10px; padding:4px 10px;" @onclick='() => LoadPreset("audio/composition-notes.wav", "composition · D minor piece")'>
+                        ♫ composition notes
+                    </button>
+                    <button class="btn-zen" style="font-size:10px; padding:4px 10px;" @onclick="LoadDemo">
+                        ∿ sine wave
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Waveform -->
+        <div class="aa-waveform-wrap" style="@(audioLoaded ? "" : "display:none")">
+            <div id="waveform" class="aa-waveform"></div>
+
+            <!-- Transport controls -->
+            <div class="aa-transport">
+                <button class="aa-transport-btn" @onclick="PlayPause">
+                    @(isPlaying ? "⏸" : "▶")
+                </button>
+                <div class="aa-time-display">
+                    <span class="aa-current-time">@FormatTime(currentTime)</span>
+                    <span style="color:var(--slate);">/</span>
+                    <span style="color:var(--slate-2);">@FormatTime(duration)</span>
+                </div>
+                <div style="flex:1;"></div>
+                <div class="aa-time-display" style="font-size:10px; color:var(--matcha-dim);">
+                    @if (markStart.HasValue && !markEnd.HasValue)
+                    {
+                        <span>marking from @FormatTime(markStart.Value)...</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Annotation markers on a timeline bar -->
+            @if (duration > 0)
+            {
+                <div class="aa-marker-bar">
+                    @foreach (var ann in annotations)
+                    {
+                        var leftPct = (ann.TimeSec / duration) * 100;
+                        var widthPct = ann.EndTimeSec.HasValue
+                            ? ((ann.EndTimeSec.Value - ann.TimeSec) / duration) * 100
+                            : 0.3;
+                        <div class="aa-marker @(ann.EndTimeSec.HasValue ? "range" : "point")"
+                             style="left:@(leftPct)%; width:@(widthPct)%;"
+                             title="@FormatTime(ann.TimeSec): @ann.Text"
+                             @onclick="() => SeekToAnnotation(ann)">
+                        </div>
+                    }
+                    <!-- Current position indicator -->
+                    <div class="aa-marker current" style="left:@((currentTime / Math.Max(duration, 1)) * 100)%;"></div>
+                </div>
+            }
+        </div>
+
+        <!-- Annotation input -->
+        @if (audioLoaded)
+        {
+            <div class="aa-input-area">
+                <div class="aa-input-row">
+                    <div class="aa-input-time">
+                        @FormatTime(currentTime)
+                    </div>
+                    <textarea @bind="annotationText" @bind:event="oninput" @onkeydown="OnAnnotationKeyDown"
+                              placeholder="annotate this moment..." rows="2"
+                              class="aa-input-textarea"></textarea>
+                    <div class="aa-input-actions">
+                        <button class="btn-zen" @onclick="ToggleRangeMode" title="Mark a range (start/end)">
+                            @(markStart.HasValue ? "end range" : "range")
+                        </button>
+                        <button class="btn-zen primary" @onclick="AddAnnotation"
+                                disabled="@string.IsNullOrWhiteSpace(annotationText)">
+                            add
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editing selected annotation -->
+            @if (selectedAnnotation != null)
+            {
+                <div class="aa-selected-panel">
+                    <div style="font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:var(--matcha-dim); margin-bottom:6px;">
+                        selected · @FormatTime(selectedAnnotation.TimeSec)
+                    </div>
+                    <textarea @bind="selectedAnnotation.Text" rows="3"
+                              style="width:100%; background:transparent; border:1px solid var(--chalk); font-family:inherit; font-size:12px; color:var(--charcoal); padding:8px; outline:none; resize:vertical; line-height:1.7;"></textarea>
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <button class="btn-zen" style="font-size:9px; padding:3px 8px;" @onclick="() => selectedAnnotation = null">deselect</button>
+                        <button class="btn-zen danger" style="font-size:9px; padding:3px 8px;" @onclick="DeleteSelectedAnnotation">delete</button>
+                    </div>
+                </div>
+            }
+        }
+
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public Guid? EntityId { get; set; }
+
+    private string title = "";
+    private string audioUrl = "";
+    private bool audioLoaded;
+    private bool isPlaying;
+    private double currentTime;
+    private double duration;
+
+    private string annotationText = "";
+    private double? markStart;
+    private double? markEnd;
+
+    private Annotation? selectedAnnotation;
+    private List<Annotation> annotations = [];
+
+    private DotNetObjectReference<AudioAnnotate>? selfRef;
+
+    private class Annotation
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public double TimeSec { get; set; }
+        public double? EndTimeSec { get; set; }
+        public string Text { get; set; } = "";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("notoAudio.init", selfRef, "#waveform", null);
+        }
+    }
+
+    [JSInvokable]
+    public void OnTimeUpdate(double time)
+    {
+        currentTime = time;
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnReady(double dur)
+    {
+        duration = dur;
+        audioLoaded = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadFromUrl()
+    {
+        if (string.IsNullOrWhiteSpace(audioUrl)) return;
+        await JS.InvokeVoidAsync("notoAudio.loadUrl", audioUrl.Trim());
+    }
+
+    private async Task LoadFromFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        // Read to byte array and create object URL via JS
+        using var stream = file.OpenReadStream(maxAllowedSize: 100_000_000); // 100MB max
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        var bytes = ms.ToArray();
+        var base64 = Convert.ToBase64String(bytes);
+        var mimeType = file.ContentType;
+
+        await JS.InvokeVoidAsync("eval", $@"
+            var byteChars = atob('{base64}');
+            var byteNumbers = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+            var byteArray = new Uint8Array(byteNumbers);
+            var blob = new Blob([byteArray], {{type: '{mimeType}'}});
+            window.notoAudio.loadBlob(blob);
+        ");
+
+        title = file.Name;
+    }
+
+    private async Task LoadPreset(string path, string presetTitle)
+    {
+        audioUrl = path;
+        title = presetTitle;
+        await JS.InvokeVoidAsync("notoAudio.loadUrl", path);
+    }
+
+    private async Task LoadDemo()
+    {
+        // Generate a sine wave demo via Web Audio API
+        await JS.InvokeVoidAsync("eval", @"
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            var sr = ctx.sampleRate;
+            var dur = 30;
+            var buf = ctx.createBuffer(1, sr * dur, sr);
+            var data = buf.getChannelData(0);
+            for (var i = 0; i < data.length; i++) {
+                var t = i / sr;
+                // Mix of frequencies for visual interest
+                data[i] = 0.3 * Math.sin(2 * Math.PI * 220 * t)
+                         + 0.2 * Math.sin(2 * Math.PI * 330 * t * (1 + 0.1 * Math.sin(t)))
+                         + 0.1 * Math.sin(2 * Math.PI * 550 * t)
+                         + 0.15 * Math.sin(2 * Math.PI * 110 * t * (1 + 0.3 * Math.sin(0.5 * t)));
+            }
+            // Encode as WAV
+            function encodeWAV(buffer) {
+                var numChannels = 1, sampleRate = buffer.sampleRate;
+                var data = buffer.getChannelData(0);
+                var dataLength = data.length * 2;
+                var view = new DataView(new ArrayBuffer(44 + dataLength));
+                function writeString(offset, str) { for (var i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); }
+                writeString(0, 'RIFF'); view.setUint32(4, 36 + dataLength, true); writeString(8, 'WAVE');
+                writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+                view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+                view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+                writeString(36, 'data'); view.setUint32(40, dataLength, true);
+                for (var i = 0; i < data.length; i++) { var s = Math.max(-1, Math.min(1, data[i])); view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true); }
+                return new Blob([view], { type: 'audio/wav' });
+            }
+            window.notoAudio.loadBlob(encodeWAV(buf));
+        ");
+        title = "demo · sine waves";
+    }
+
+    private async Task PlayPause()
+    {
+        await JS.InvokeVoidAsync("notoAudio.play");
+        isPlaying = !isPlaying;
+    }
+
+    private async Task SeekToAnnotation(Annotation ann)
+    {
+        selectedAnnotation = ann;
+        await JS.InvokeVoidAsync("notoAudio.seekTo", ann.TimeSec);
+    }
+
+    private void ToggleRangeMode()
+    {
+        if (markStart.HasValue)
+        {
+            markEnd = currentTime;
+        }
+        else
+        {
+            markStart = currentTime;
+        }
+    }
+
+    private void AddAnnotation()
+    {
+        if (string.IsNullOrWhiteSpace(annotationText)) return;
+
+        var ann = new Annotation
+        {
+            TimeSec = markStart ?? currentTime,
+            EndTimeSec = markEnd,
+            Text = annotationText.Trim(),
+        };
+        annotations.Add(ann);
+
+        annotationText = "";
+        markStart = null;
+        markEnd = null;
+    }
+
+    private void DeleteSelectedAnnotation()
+    {
+        if (selectedAnnotation == null) return;
+        annotations.Remove(selectedAnnotation);
+        selectedAnnotation = null;
+    }
+
+    private void OnAnnotationKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.MetaKey || e.CtrlKey))
+        {
+            AddAnnotation();
+        }
+    }
+
+    private async Task SaveSession()
+    {
+        // Save as a work with annotations in meta
+        var metaDict = new Dictionary<string, object>
+        {
+            ["kind"] = "audio-annotation",
+            ["audio_url"] = audioUrl,
+            ["annotations"] = annotations.Select(a => new
+            {
+                time_sec = a.TimeSec,
+                end_time_sec = a.EndTimeSec,
+                text = a.Text
+            }).ToList()
+        };
+        var metaJson = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(metaDict));
+
+        var body = string.Join("\n\n", annotations
+            .OrderBy(a => a.TimeSec)
+            .Select(a => $"[{FormatTime(a.TimeSec)}] {a.Text}"));
+
+        var t = string.IsNullOrWhiteSpace(title) ? "audio annotation" : title.Trim();
+        await Svc.Create(EntityTypes.Capture, t, body, metaJson);
+    }
+
+    private string FormatTime(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.Hours > 0
+            ? ts.ToString(@"h\:mm\:ss")
+            : ts.ToString(@"m\:ss");
+    }
+
+    public void Dispose()
+    {
+        selfRef?.Dispose();
+        _ = JS.InvokeVoidAsync("notoAudio.destroy");
+    }
+}

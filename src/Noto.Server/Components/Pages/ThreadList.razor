@@ -1,0 +1,90 @@
+@page "/threads"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+<div class="page-date">organize</div>
+<div class="page-title">threads</div>
+
+<!-- New thread form -->
+<div class="quick-capture" style="margin-bottom:24px;">
+    <div style="display:flex; gap:8px; align-items:flex-end;">
+        <input type="text" @bind="newName" placeholder="new thread name..."
+               style="flex:1; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:13px; color:var(--charcoal); padding:6px 0; outline:none;" />
+        <input type="text" @bind="newDesc" placeholder="description (optional)"
+               style="flex:2; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal-2); padding:6px 0; outline:none;" />
+        <button class="btn-zen primary" @onclick="CreateThread" disabled="@string.IsNullOrWhiteSpace(newName)">create</button>
+    </div>
+</div>
+
+@if (toast != null)
+{
+    <div class="toast-msg show">@toast</div>
+}
+
+<div class="note-stream-label">@threads.Count threads</div>
+
+@if (threads.Count == 0)
+{
+    <div class="empty-state">
+        <div class="icon">∿</div>
+        <p>no threads yet.<br/>create one above, or tag a capture.</p>
+    </div>
+}
+else
+{
+    @foreach (var (thread, count, lastCapture) in threads)
+    {
+        <div class="note-card type-dream" @onclick="() => GoToThread(thread.Id)"
+             style="cursor:pointer;">
+            <div class="note-card-meta">
+                <span class="note-type-tag tag-thread">thread</span>
+                <span class="note-time">@count captures</span>
+                @if (lastCapture.HasValue)
+                {
+                    <span class="note-id">last: @lastCapture.Value.ToLocalTime().ToString("MMM d")</span>
+                }
+            </div>
+            <div class="note-title">@thread.Title</div>
+            @if (thread.Body != null)
+            {
+                <div class="note-preview">@thread.Body</div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<(Entity Thread, int CaptureCount, DateTime? LastCapture)> threads = [];
+    private string newName = "";
+    private string newDesc = "";
+    private string? toast;
+
+    private void GoToThread(Guid id) => Nav.NavigateTo($"/threads/{id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadThreads();
+    }
+
+    private async Task LoadThreads()
+    {
+        threads = await Svc.GetThreadsWithStats();
+    }
+
+    private async Task CreateThread()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        var desc = string.IsNullOrWhiteSpace(newDesc) ? null : newDesc.Trim();
+        await Svc.Create(EntityTypes.Thread, newName.Trim(), desc);
+        newName = "";
+        newDesc = "";
+        await LoadThreads();
+        toast = "thread created";
+        StateHasChanged();
+        await Task.Delay(1500);
+        toast = null;
+        StateHasChanged();
+    }
+}

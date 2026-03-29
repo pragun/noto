@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nōto — Thread</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --charcoal:   #2e2e2e;
+      --charcoal-2: #3d3d3d;
+      --slate:      #636e72;
+      --slate-2:    #8a9ba8;
+      --matcha:     #7a9e7e;
+      --matcha-2:   #a8c5aa;
+      --matcha-dim: #4a6b4e;
+      --parchment:  #f4efe4;
+      --parchment-2:#ede5d3;
+      --chalk:      #dad4c8;
+      --ink:        #2e2e2e;
+      --ember:      #b08968;
+      --ember-dim:  #8a6d50;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      background-color: var(--parchment);
+      color: var(--ink);
+      font-size: 13px;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* ── Slim nav ──────────────────────────────────────── */
+    .side-nav {
+      width: 52px;
+      background: #242424;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      gap: 4px;
+      border-right: 1px solid rgba(255,255,255,0.05);
+      flex-shrink: 0;
+    }
+
+    .side-nav-brand {
+      font-size: 13px;
+      color: var(--matcha);
+      margin-bottom: 18px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+    }
+
+    .side-icon {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; color: var(--slate); cursor: pointer;
+      border-radius: 2px; transition: all 0.15s;
+    }
+    .side-icon:hover { color: var(--parchment); background: rgba(255,255,255,0.05); }
+    .side-icon.active { color: var(--matcha-2); background: rgba(122,158,126,0.12); }
+
+    .side-nav-bottom {
+      margin-top: auto;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+
+    /* ── Thread list panel ────────────────────────────── */
+    .thread-list-panel {
+      width: 260px;
+      background: var(--charcoal);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid rgba(255,255,255,0.07);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .thread-list-header {
+      padding: 20px 20px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .thread-list-title {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--slate-2);
+      margin-bottom: 10px;
+    }
+
+    .thread-list-search input {
+      width: 100%;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--parchment);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+      outline: none;
+    }
+    .thread-list-search input::placeholder { color: var(--slate); }
+    .thread-list-search input:focus { border-color: rgba(122,158,126,0.4); }
+
+    .thread-filter-row {
+      display: flex; gap: 4px; padding: 10px 20px 0;
+    }
+
+    .thread-filter {
+      font-family: inherit; font-size: 9px;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--slate);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .thread-filter.active {
+      background: rgba(122,158,126,0.12);
+      border-color: var(--matcha-dim);
+      color: var(--matcha-2);
+    }
+
+    .thread-scroll {
+      flex: 1; overflow-y: auto; padding: 8px 0;
+    }
+    .thread-scroll::-webkit-scrollbar { width: 3px; }
+    .thread-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+    .thread-item {
+      padding: 14px 20px;
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .thread-item:hover {
+      background: rgba(255,255,255,0.04);
+    }
+    .thread-item.active {
+      background: rgba(122,158,126,0.08);
+      border-left-color: var(--matcha);
+    }
+
+    .thread-item-name {
+      font-size: 12px;
+      color: var(--parchment);
+      margin-bottom: 4px;
+      font-weight: 400;
+    }
+
+    .thread-item-meta {
+      font-size: 9px;
+      color: var(--slate);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .thread-item-preview {
+      font-size: 10px;
+      color: rgba(244,239,228,0.45);
+      margin-top: 6px;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .thread-status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-active { background: var(--matcha); }
+    .dot-quiet { background: var(--slate); opacity: 0.5; }
+    .dot-dream { background: var(--slate-2); }
+
+    .thread-new-btn {
+      margin: 8px 20px 14px;
+      display: block;
+      width: calc(100% - 40px);
+      background: transparent;
+      border: 1px dashed rgba(122,158,126,0.3);
+      color: var(--matcha-dim);
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      padding: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .thread-new-btn:hover {
+      border-color: var(--matcha);
+      background: rgba(122,158,126,0.06);
+    }
+
+    /* ── Main thread view ────────────────────────────── */
+    .thread-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background-color: var(--parchment);
+      background-image:
+        repeating-linear-gradient(
+          0deg, transparent, transparent 28px,
+          rgba(0,0,0,0.016) 28px, rgba(0,0,0,0.016) 29px
+        );
+    }
+
+    .thread-header {
+      padding: 20px 32px 16px;
+      border-bottom: 1px solid var(--chalk);
+      background: rgba(244,239,228,0.85);
+      backdrop-filter: blur(4px);
+      flex-shrink: 0;
+    }
+
+    .thread-header-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .thread-name {
+      font-size: 20px;
+      font-weight: 300;
+      color: var(--charcoal);
+      letter-spacing: -0.01em;
+    }
+
+    .thread-header-badges {
+      display: flex;
+      gap: 6px;
+      margin-top: 5px;
+    }
+
+    .thread-badge {
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      padding: 2px 8px;
+      border-radius: 1px;
+    }
+
+    .badge-theme {
+      background: rgba(122,158,126,0.12);
+      border: 1px solid rgba(122,158,126,0.25);
+      color: var(--matcha-dim);
+    }
+
+    .badge-period {
+      background: rgba(0,0,0,0.05);
+      border: 1px solid var(--chalk);
+      color: var(--slate);
+    }
+
+    .thread-header-actions {
+      margin-left: auto;
+      display: flex; gap: 8px;
+      margin-top: 2px;
+    }
+
+    .th-btn {
+      font-family: inherit; font-size: 10px;
+      letter-spacing: 0.06em;
+      padding: 5px 14px;
+      border: 1px solid var(--chalk);
+      background: transparent;
+      color: var(--slate);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .th-btn:hover { border-color: var(--slate-2); color: var(--charcoal); }
+    .th-btn.primary {
+      background: var(--matcha); border-color: var(--matcha);
+      color: var(--charcoal); font-weight: 500;
+    }
+    .th-btn.primary:hover { background: var(--matcha-2); }
+
+    .thread-summary {
+      margin-top: 12px;
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--charcoal-2);
+      font-style: italic;
+      padding-left: 12px;
+      border-left: 2px solid var(--matcha-2);
+    }
+
+    .thread-summary-label {
+      font-size: 8px;
+      font-style: normal;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--matcha-dim);
+      margin-bottom: 4px;
+    }
+
+    /* ── Timeline ─────────────────────────────────────── */
+    .timeline-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 32px 40px;
+    }
+
+    .timeline-scroll::-webkit-scrollbar { width: 4px; }
+    .timeline-scroll::-webkit-scrollbar-thumb { background: var(--chalk); }
+
+    /* Date separator */
+    .tl-date {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 28px 0 16px;
+    }
+
+    .tl-date-text {
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--slate-2);
+      white-space: nowrap;
+    }
+
+    .tl-date-line {
+      flex: 1;
+      height: 1px;
+      background: var(--chalk);
+    }
+
+    /* Generic timeline entry */
+    .tl-entry {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 4px;
+    }
+
+    /* The spine */
+    .tl-spine {
+      width: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .tl-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      border: 2px solid var(--chalk);
+      background: var(--parchment);
+      margin-top: 6px;
+      flex-shrink: 0;
+      z-index: 1;
+    }
+
+    .tl-dot.voice  { border-color: var(--matcha); background: rgba(122,158,126,0.2); }
+    .tl-dot.dream  { border-color: var(--slate-2); background: rgba(138,155,168,0.2); }
+    .tl-dot.text   { border-color: var(--chalk); }
+    .tl-dot.mirror { border-color: var(--matcha); background: var(--matcha); }
+    .tl-dot.catalyst { border-color: var(--slate-2); background: var(--slate-2); }
+    .tl-dot.ai     { border-color: var(--ember); background: rgba(176,137,104,0.2); }
+
+    .tl-line {
+      width: 1px;
+      flex: 1;
+      background: var(--chalk);
+      min-height: 8px;
+    }
+
+    /* Entry card */
+    .tl-card {
+      flex: 1;
+      padding: 12px 16px;
+      margin-bottom: 4px;
+      transition: all 0.15s;
+      max-width: 600px;
+    }
+
+    .tl-card-capture {
+      background: rgba(255,255,255,0.45);
+      border: 1px solid var(--chalk);
+      border-left: 3px solid transparent;
+    }
+
+    .tl-card-capture.voice { border-left-color: var(--matcha-dim); }
+    .tl-card-capture.dream { border-left-color: var(--slate-2); }
+    .tl-card-capture.text  { border-left-color: var(--chalk); }
+
+    .tl-card-capture:hover {
+      background: rgba(255,255,255,0.7);
+    }
+
+    .tl-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .tl-type-tag {
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+    }
+    .tag-v { background: rgba(74,107,78,0.12); color: var(--matcha-dim); }
+    .tag-d { background: rgba(99,110,114,0.12); color: var(--slate); }
+    .tag-t { background: rgba(0,0,0,0.05); color: var(--slate); }
+    .tag-ai { background: rgba(176,137,104,0.12); color: var(--ember-dim); }
+
+    .tl-time {
+      font-size: 9px;
+      color: var(--slate-2);
+      margin-left: auto;
+    }
+
+    .tl-text {
+      font-size: 12px;
+      line-height: 1.75;
+      color: var(--charcoal-2);
+    }
+
+    .tl-text.excerpt {
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Resonant segment card */
+    .tl-card-segment {
+      background: rgba(122,158,126,0.06);
+      border: 1px solid rgba(122,158,126,0.2);
+      border-left: 3px solid var(--matcha);
+    }
+
+    .tl-card-segment.catalyst-card {
+      background: rgba(138,155,168,0.06);
+      border-color: rgba(138,155,168,0.2);
+      border-left-color: var(--slate-2);
+    }
+
+    .seg-card-label {
+      font-size: 8px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .seg-card-label.mirror-label { color: var(--matcha-dim); }
+    .seg-card-label.catalyst-label { color: var(--slate); }
+
+    .seg-card-quote {
+      font-size: 12px;
+      line-height: 1.75;
+      color: var(--charcoal-2);
+      font-style: italic;
+      padding-left: 10px;
+      border-left: 1px solid rgba(122,158,126,0.3);
+    }
+
+    .seg-card-quote.catalyst-quote {
+      border-left-color: rgba(138,155,168,0.3);
+    }
+
+    .seg-card-note {
+      font-size: 10px;
+      color: var(--slate);
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+
+    /* AI synthesis card */
+    .tl-card-ai {
+      background: rgba(176,137,104,0.05);
+      border: 1px solid rgba(176,137,104,0.15);
+      border-top: 2px solid var(--ember);
+    }
+
+    .tl-card-ai .tl-text {
+      font-size: 11px;
+      line-height: 1.8;
+    }
+
+    .tl-card-ai .tl-text em {
+      font-style: normal;
+      background: rgba(122,158,126,0.1);
+      padding: 0 2px;
+    }
+
+    /* Photo card */
+    .tl-card-photo {
+      background: rgba(255,255,255,0.45);
+      border: 1px solid var(--chalk);
+      padding: 8px;
+    }
+
+    .photo-placeholder {
+      width: 100%;
+      height: 140px;
+      background: var(--chalk);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: var(--slate);
+      margin-bottom: 8px;
+    }
+
+    .photo-caption {
+      font-size: 10px;
+      color: var(--slate);
+      line-height: 1.5;
+      padding: 4px 8px;
+    }
+
+    /* Expand / collapse */
+    .tl-expand {
+      font-family: inherit;
+      font-size: 9px;
+      color: var(--matcha-dim);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 0;
+      margin-top: 4px;
+      letter-spacing: 0.06em;
+    }
+    .tl-expand:hover { color: var(--matcha); text-decoration: underline; }
+
+    /* Connection hint */
+    .tl-connection {
+      margin: 6px 0 6px 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tl-connection-line {
+      width: 30px;
+      height: 1px;
+      background: repeating-linear-gradient(
+        90deg, var(--chalk), var(--chalk) 3px, transparent 3px, transparent 6px
+      );
+    }
+
+    .tl-connection-text {
+      font-size: 9px;
+      color: var(--slate-2);
+      font-style: italic;
+    }
+
+    /* ── Right: thread info panel ─────────────────────── */
+    .thread-info-panel {
+      width: 240px;
+      background: var(--parchment-2);
+      border-left: 1px solid var(--chalk);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .tip-section {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--chalk);
+    }
+
+    .tip-label {
+      font-size: 8px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 10px;
+    }
+
+    .tip-stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    .tip-stat-name {
+      font-size: 10px;
+      color: var(--charcoal-2);
+    }
+
+    .tip-stat-val {
+      font-size: 11px;
+      color: var(--charcoal);
+      font-weight: 500;
+    }
+
+    .tip-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    .tip-scroll::-webkit-scrollbar { width: 3px; }
+    .tip-scroll::-webkit-scrollbar-thumb { background: var(--chalk); }
+
+    /* Related threads */
+    .related-thread {
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+    .related-thread:hover { background: rgba(0,0,0,0.03); }
+
+    .related-thread-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .related-thread-name {
+      font-size: 10px;
+      color: var(--charcoal-2);
+    }
+
+    .related-thread-reason {
+      font-size: 9px;
+      color: var(--slate-2);
+      margin-left: auto;
+    }
+
+    /* Dreams in thread */
+    .dream-mini {
+      padding: 10px 18px;
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+
+    .dream-mini-name {
+      font-size: 10px;
+      color: var(--charcoal-2);
+      margin-bottom: 2px;
+    }
+
+    .dream-mini-date {
+      font-size: 9px;
+      color: var(--slate-2);
+    }
+
+    /* Actions at bottom */
+    .tip-actions {
+      padding: 14px 18px;
+      border-top: 1px solid var(--chalk);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .tip-action-btn {
+      font-family: inherit;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+      border: 1px solid var(--chalk);
+      background: transparent;
+      color: var(--slate);
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: left;
+    }
+    .tip-action-btn:hover {
+      border-color: var(--matcha-2);
+      color: var(--matcha-dim);
+      background: rgba(122,158,126,0.06);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Slim nav ─────────────────────────────────────── -->
+<div class="side-nav">
+  <div class="side-nav-brand">n</div>
+  <a href="mockup_dashboard.html" class="side-icon" title="Stream">▦</a>
+  <a href="mockup_workspace.html" class="side-icon" title="Workspace">✦</a>
+  <div class="side-icon" title="Themes">◈</div>
+  <div class="side-icon active" title="Threads">∿</div>
+  <div class="side-icon" title="Dreams">☽</div>
+  <div class="side-nav-bottom">
+    <div class="side-icon" style="background:rgba(122,158,126,0.15); color:var(--matcha-2);">+</div>
+  </div>
+</div>
+
+<!-- ── Thread list ──────────────────────────────────── -->
+<div class="thread-list-panel">
+  <div class="thread-list-header">
+    <div class="thread-list-title">threads</div>
+    <div class="thread-list-search">
+      <input type="text" placeholder="search threads...">
+    </div>
+  </div>
+
+  <div class="thread-filter-row">
+    <button class="thread-filter active">all</button>
+    <button class="thread-filter">active</button>
+    <button class="thread-filter">quiet</button>
+    <button class="thread-filter">dreams</button>
+  </div>
+
+  <div class="thread-scroll">
+
+    <div class="thread-item active">
+      <div class="thread-item-name">the ridge</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-active"></span>
+        active · 14 captures · 3 segments
+      </div>
+      <div class="thread-item-preview">recurring landscape — dry grass slope, standing at the edge. keeps returning with subtle shifts.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">logos vs eros</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-active"></span>
+        active · 22 captures · 8 segments
+      </div>
+      <div class="thread-item-preview">the tension between analytic precision and felt experience. shield vs warmth.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">the music thing</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-active"></span>
+        active · 9 captures · 4 segments
+      </div>
+      <div class="thread-item-preview">composition as self-discovery. the hands knowing before the mind.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">dad's house</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-quiet"></span>
+        quiet since feb · 6 captures
+      </div>
+      <div class="thread-item-preview">grief, inheritance, the weight of rooms that hold memory.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">the library dream</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-dream"></span>
+        dream · 3 nights · 2 segments
+      </div>
+      <div class="thread-item-preview">books arranged by feeling, not subject. navigation by intuition.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">belonging as practice</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-active"></span>
+        active · 11 captures · 5 segments
+      </div>
+      <div class="thread-item-preview">not belonging to a place but to a way of being. portable home.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">spring at the creek</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-active"></span>
+        new · 4 captures
+      </div>
+      <div class="thread-item-preview">walks, birds, the water level rising. naturalist observations.</div>
+    </div>
+
+    <div class="thread-item">
+      <div class="thread-item-name">body keeps the score</div>
+      <div class="thread-item-meta">
+        <span class="thread-status-dot dot-quiet"></span>
+        quiet since jan · 8 captures · 3 segments
+      </div>
+      <div class="thread-item-preview">somatic signals, grief in the chest, the intelligence of the nervous system.</div>
+    </div>
+
+    <button class="thread-new-btn">+ start a new thread</button>
+  </div>
+</div>
+
+<!-- ── Main thread timeline ─────────────────────────── -->
+<div class="thread-main">
+  <div class="thread-header">
+    <div class="thread-header-top">
+      <div>
+        <div class="thread-name">the ridge</div>
+        <div class="thread-header-badges">
+          <span class="thread-badge badge-theme">Dreams as Inner Maps</span>
+          <span class="thread-badge badge-theme">Psyche in Transition</span>
+          <span class="thread-badge badge-period">oct 2025 → present</span>
+        </div>
+      </div>
+      <div class="thread-header-actions">
+        <button class="th-btn">summarize</button>
+        <button class="th-btn primary">open in workspace</button>
+      </div>
+    </div>
+    <div class="thread-summary">
+      <div class="thread-summary-label">AI-maintained summary</div>
+      A recurring dream landscape — a dry grass ridge with a long slope — that has appeared at least five times since October. Initially carried a feeling of exposure and vertigo. Over the months, the emotional tone has shifted: from needing to hold ground, to standing without effort. Most recent appearance (March 21) felt like resolution rather than repetition.
+    </div>
+  </div>
+
+  <div class="timeline-scroll">
+
+    <!-- ── October ─────── -->
+    <div class="tl-date">
+      <span class="tl-date-text">October 2025</span>
+      <span class="tl-date-line"></span>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot voice"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-capture voice">
+        <div class="tl-card-meta">
+          <span class="tl-type-tag tag-v">voice</span>
+          <span class="tl-time">Oct 14 · 07:22</span>
+        </div>
+        <div class="tl-text excerpt">
+          had this dream — I'm standing on a ridge, it's all dry yellow grass sloping away from me, and I can see for miles but the ground isn't stable. not collapsing, just... tilted. like standing on the side of something and knowing I shouldn't be comfortable but I'm not exactly scared either. just very aware of the slope.
+        </div>
+        <button class="tl-expand">show full ↓</button>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot mirror"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-segment">
+        <div class="seg-card-label mirror-label">◉ mirror — from conversation</div>
+        <div class="seg-card-quote">
+          The ridge isn't danger — it's exposure. You're standing somewhere with no cover and the feeling isn't fear, it's the rawness of being fully visible to yourself. The slope is the gradient of a transition you're already on.
+        </div>
+        <div class="seg-card-note">
+          Naming the emotional quality of the landscape as exposure rather than threat. This reframe shifted how subsequent appearances were received.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-connection">
+      <div class="tl-connection-line"></div>
+      <span class="tl-connection-text">2 weeks quiet</span>
+    </div>
+
+    <!-- ── November ─────── -->
+    <div class="tl-date">
+      <span class="tl-date-text">November 2025</span>
+      <span class="tl-date-line"></span>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot dream"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-capture dream">
+        <div class="tl-card-meta">
+          <span class="tl-type-tag tag-d">dream</span>
+          <span class="tl-time">Nov 3 · 06:45</span>
+        </div>
+        <div class="tl-text excerpt">
+          the ridge again but this time there were others on it — not people I knew, just presences. they were all facing the same direction. nobody was talking. it felt like a vigil or a witnessing. the grass was the same dry gold.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot text"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-capture text">
+        <div class="tl-card-meta">
+          <span class="tl-type-tag tag-t">note</span>
+          <span class="tl-time">Nov 3 · 11:20</span>
+        </div>
+        <div class="tl-text">
+          maybe the ridge is about collective transition — not just mine. the presences were facing the same direction. witnessing, not waiting.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot catalyst"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-segment catalyst-card">
+        <div class="seg-card-label catalyst-label">◈ catalyst — from conversation</div>
+        <div class="seg-card-quote catalyst-quote">
+          When the same landscape returns with new inhabitants, the dream is evolving its vocabulary. The ridge is no longer just your perch — it's becoming a commons. That shift from solitary exposure to shared witnessing might be saying something about how you hold transition itself.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── January ─────── -->
+    <div class="tl-date">
+      <span class="tl-date-text">January 2026</span>
+      <span class="tl-date-line"></span>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot voice"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-capture voice">
+        <div class="tl-card-meta">
+          <span class="tl-type-tag tag-v">voice</span>
+          <span class="tl-time">Jan 18 · 07:50</span>
+        </div>
+        <div class="tl-text excerpt">
+          ridge dream again — shorter this time. just standing. the slope didn't feel precarious anymore. like I'd been there enough times that it was just... where I stand. no drama about it.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-photo">
+        <div class="photo-placeholder">
+          ⛰
+        </div>
+        <div class="photo-caption">
+          drove past this on 101 and pulled over. not the ridge but the same quality of light and grass. tagged automatically.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-connection">
+      <div class="tl-connection-line"></div>
+      <span class="tl-connection-text">the feeling settles</span>
+    </div>
+
+    <!-- ── March ─────── -->
+    <div class="tl-date">
+      <span class="tl-date-text">March 2026</span>
+      <span class="tl-date-line"></span>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot voice"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-capture voice">
+        <div class="tl-card-meta">
+          <span class="tl-type-tag tag-v">voice</span>
+          <span class="tl-time">today · 07:14</span>
+        </div>
+        <div class="tl-text">
+          woke up with the image of the ridge again — that same slope, the dry grass, something about standing at the edge and not being afraid. felt like a continuation but also a resolution. like the dream doesn't need to make this argument anymore.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-spine">
+        <div class="tl-dot ai"></div>
+        <div class="tl-line"></div>
+      </div>
+      <div class="tl-card tl-card-ai">
+        <div class="tl-card-meta">
+          <span class="tl-type-tag tag-ai">synthesis</span>
+          <span class="tl-time">auto-generated</span>
+        </div>
+        <div class="tl-text">
+          Five appearances over five months. The progression: <em>precarious → witnessed → familiar → resolved</em>. The ridge moved from a symbol that demanded attention to one that confirmed something already integrated. If this is the last appearance, it may mean the transition it was tracking is no longer in question — you've arrived at the slope and it's just ground now.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Thread info panel ────────────────────────────── -->
+<div class="thread-info-panel">
+
+  <div class="tip-section">
+    <div class="tip-label">thread stats</div>
+    <div class="tip-stat-row">
+      <span class="tip-stat-name">captures</span>
+      <span class="tip-stat-val">14</span>
+    </div>
+    <div class="tip-stat-row">
+      <span class="tip-stat-name">segments</span>
+      <span class="tip-stat-val">3</span>
+    </div>
+    <div class="tip-stat-row">
+      <span class="tip-stat-name">dream appearances</span>
+      <span class="tip-stat-val">5</span>
+    </div>
+    <div class="tip-stat-row">
+      <span class="tip-stat-name">first seen</span>
+      <span class="tip-stat-val">Oct 14</span>
+    </div>
+    <div class="tip-stat-row">
+      <span class="tip-stat-name">last active</span>
+      <span class="tip-stat-val">today</span>
+    </div>
+    <div class="tip-stat-row">
+      <span class="tip-stat-name">span</span>
+      <span class="tip-stat-val">5 months</span>
+    </div>
+  </div>
+
+  <div class="tip-section">
+    <div class="tip-label">related threads</div>
+  </div>
+
+  <div class="tip-scroll">
+    <div class="related-thread">
+      <div class="related-thread-dot" style="background:var(--matcha);"></div>
+      <span class="related-thread-name">belonging as practice</span>
+      <span class="related-thread-reason">thematic</span>
+    </div>
+    <div class="related-thread">
+      <div class="related-thread-dot" style="background:var(--slate-2);"></div>
+      <span class="related-thread-name">body keeps the score</span>
+      <span class="related-thread-reason">somatic</span>
+    </div>
+    <div class="related-thread">
+      <div class="related-thread-dot" style="background:var(--slate);"></div>
+      <span class="related-thread-name">the library dream</span>
+      <span class="related-thread-reason">dream link</span>
+    </div>
+    <div class="related-thread">
+      <div class="related-thread-dot" style="background:var(--ember);"></div>
+      <span class="related-thread-name">logos vs eros</span>
+      <span class="related-thread-reason">co-occurs</span>
+    </div>
+
+    <div class="tip-section" style="margin-top:6px;">
+      <div class="tip-label">dreams in this thread</div>
+    </div>
+
+    <div class="dream-mini">
+      <div class="dream-mini-name">☽ Ridge — solitary exposure</div>
+      <div class="dream-mini-date">Oct 14, 2025</div>
+    </div>
+    <div class="dream-mini">
+      <div class="dream-mini-name">☽ Ridge — the witnessing</div>
+      <div class="dream-mini-date">Nov 3, 2025</div>
+    </div>
+    <div class="dream-mini">
+      <div class="dream-mini-name">☽ Ridge — just ground</div>
+      <div class="dream-mini-date">Jan 18, 2026</div>
+    </div>
+    <div class="dream-mini">
+      <div class="dream-mini-name">☽ Ridge — resolution</div>
+      <div class="dream-mini-date">Mar 21, 2026</div>
+    </div>
+  </div>
+
+  <div class="tip-actions">
+    <button class="tip-action-btn">✦ &nbsp;open in workspace</button>
+    <button class="tip-action-btn">⊹ &nbsp;export as seed</button>
+    <button class="tip-action-btn">∿ &nbsp;generate arc for thread</button>
+    <button class="tip-action-btn" style="color:var(--slate-2);">⊘ &nbsp;mark as quiet</button>
+  </div>
+</div>
+
+</body>
+</html>
