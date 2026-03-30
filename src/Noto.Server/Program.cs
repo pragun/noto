@@ -18,7 +18,7 @@ builder.Services.AddScoped<OpenRouterClient>();
 builder.Services.AddScoped<AiConversationService>();
 builder.Services.AddHttpClient("Embeddings");
 builder.Services.AddHttpClient("OpenRouter");
-builder.Services.AddHostedService<EmbeddingWorker>();
+// EmbeddingWorker available but not auto-started — embed on demand via CLI or future UI trigger
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

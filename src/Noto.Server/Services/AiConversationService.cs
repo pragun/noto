@@ -27,12 +27,15 @@ public class AiConversationService
         - Keep responses concise unless depth is clearly called for.
         """;
 
-    public string BuildSystemPromptWithSeeds(List<(string Title, string Body)> seeds)
-    {
-        if (seeds.Count == 0)
-            return SystemPrompt;
+    public string DefaultPrompt => SystemPrompt;
 
-        var sb = new StringBuilder(SystemPrompt);
+    public string BuildSystemPromptWithSeeds(List<(string Title, string Body)> seeds, string? customPrompt = null)
+    {
+        var basePrompt = customPrompt ?? SystemPrompt;
+        if (seeds.Count == 0)
+            return basePrompt;
+
+        var sb = new StringBuilder(basePrompt);
         sb.AppendLine();
         sb.AppendLine();
         sb.AppendLine("Context seeds from the person's archive:");
@@ -40,9 +43,8 @@ public class AiConversationService
 
         foreach (var (title, body) in seeds)
         {
-            var truncated = body.Length > 500 ? body[..500] + "..." : body;
             sb.AppendLine($"--- {title} ---");
-            sb.AppendLine(truncated);
+            sb.AppendLine(body);
             sb.AppendLine();
         }
 

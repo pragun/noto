@@ -1,0 +1,344 @@
+@page "/weave"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+<div class="weave-layout">
+    <div class="weave-header">
+        <div class="weave-title">loom</div>
+        <div class="weave-controls">
+            <button class="btn-weave @(timeRange == 30 ? "active" : "")" @onclick="() => SetRange(30)">month</button>
+            <button class="btn-weave @(timeRange == 90 ? "active" : "")" @onclick="() => SetRange(90)">season</button>
+            <button class="btn-weave @(timeRange == 180 ? "active" : "")" @onclick="() => SetRange(180)">half year</button>
+            <button class="btn-weave @(timeRange == 365 ? "active" : "")" @onclick="() => SetRange(365)">year</button>
+        </div>
+    </div>
+
+    @if (loading)
+    {
+        <div class="weave-loading">weaving...</div>
+    }
+    else
+    {
+        <div class="weave-canvas-wrap">
+            <!-- Thread labels -->
+            <div class="weave-labels">
+                @foreach (var (thread, idx) in threadData.Select((t, i) => (t, i)))
+                {
+                    <div class="weave-label" style="top:@(idx * laneHeight + laneHeight / 2 - 8)px;">
+                        <span class="weave-label-dot" style="background:@(GetThreadColor(idx));"></span>
+                        <span class="weave-label-text" @onclick="() => GoToThread(thread.Thread.Id)">@Truncate(thread.Thread.Title ?? "", 20)</span>
+                        <span class="weave-label-count">@thread.Captures.Count</span>
+                    </div>
+                }
+            </div>
+
+            <!-- SVG canvas -->
+            <div class="weave-svg-wrap" style="overflow-x:auto;">
+                <svg width="@svgWidth" height="@(threadData.Count * laneHeight + 40)" class="weave-svg">
+                    <!-- Time axis -->
+                    @foreach (var marker in timeMarkers)
+                    {
+                        <line x1="@marker.X" y1="0" x2="@marker.X" y2="@(threadData.Count * laneHeight)"
+                              stroke="rgba(82,70,58,0.1)" stroke-width="1" />
+                        @((MarkupString)$"<text x=\"{marker.X}\" y=\"{threadData.Count * laneHeight + 16}\" fill=\"rgba(82,70,58,0.4)\" font-size=\"9\" font-family=\"JetBrains Mono, monospace\" text-anchor=\"middle\">{marker.Label}</text>")
+                    }
+
+                    <!-- Thread lanes (warp) -->
+                    @foreach (var (thread, idx) in threadData.Select((t, i) => (t, i)))
+                    {
+                        var y = idx * laneHeight + laneHeight / 2;
+                        var color = GetThreadColor(idx);
+                        <!-- Main thread line — slightly irregular -->
+                        <line x1="0" y1="@y" x2="@svgWidth" y2="@y"
+                              stroke="@color" stroke-width="2" opacity="0.35"
+                              stroke-dasharray="8,3,2,3" />
+                    }
+
+                    <!-- Crossings (weft) — multi-thread captures -->
+                    @foreach (var crossing in crossings)
+                    {
+                        var x = TimeToX(crossing.Time);
+                        var minY = crossing.ThreadIndices.Min() * laneHeight + laneHeight / 2;
+                        var maxY = crossing.ThreadIndices.Max() * laneHeight + laneHeight / 2;
+                        <!-- Weft line -->
+                        <line x1="@x" y1="@minY" x2="@x" y2="@maxY"
+                              stroke="@GetThreadColor(crossing.ThreadIndices[0])"
+                              stroke-width="3" opacity="0.5"
+                              stroke-linecap="round" />
+                        <!-- Dots at each crossing point -->
+                        @foreach (var tidx in crossing.ThreadIndices)
+                        {
+                            var cy = tidx * laneHeight + laneHeight / 2;
+                            var isSelected = selectedCaptureId == crossing.CaptureId;
+                            @if (isSelected)
+                            {
+                                <circle cx="@x" cy="@cy" r="12" fill="none"
+                                        stroke="@GetThreadColor(tidx)" stroke-width="1.5" opacity="0.4"
+                                        class="weave-pulse" />
+                                <circle cx="@x" cy="@cy" r="7"
+                                        fill="@GetThreadColor(tidx)" opacity="1"
+                                        style="cursor:pointer;"
+                                        @onclick="() => ShowCapture(crossing.CaptureId)" />
+                            }
+                            else
+                            {
+                                <circle cx="@x" cy="@cy" r="5"
+                                        fill="@GetThreadColor(tidx)" opacity="0.85"
+                                        style="cursor:pointer;"
+                                        @onclick="() => ShowCapture(crossing.CaptureId)" />
+                            }
+                        }
+                    }
+
+                    <!-- Single-thread captures -->
+                    @foreach (var (thread, idx) in threadData.Select((t, i) => (t, i)))
+                    {
+                        var y = idx * laneHeight + laneHeight / 2;
+                        var color = GetThreadColor(idx);
+                        @foreach (var cap in thread.Captures)
+                        {
+                            var threadCount = GetCaptureThreadCount(cap.Id);
+                            @if (threadCount <= 1)
+                            {
+                                var x = TimeToX(cap.CreatedAt);
+                                var isSelected = selectedCaptureId == cap.Id;
+                                @if (isSelected)
+                                {
+                                    <circle cx="@x" cy="@y" r="10" fill="none"
+                                            stroke="@color" stroke-width="1.5" opacity="0.4"
+                                            class="weave-pulse" />
+                                    <circle cx="@x" cy="@y" r="5.5"
+                                            fill="@color" opacity="1"
+                                            style="cursor:pointer;"
+                                            @onclick="() => ShowCapture(cap.Id)" />
+                                }
+                                else
+                                {
+                                    <circle cx="@x" cy="@y" r="3.5"
+                                            fill="@color" opacity="0.7"
+                                            style="cursor:pointer;"
+                                            @onclick="() => ShowCapture(cap.Id)" />
+                                }
+                            }
+                        }
+                    }
+                </svg>
+            </div>
+        </div>
+
+        <!-- Selected capture — centered medallion -->
+        @if (selectedCapture != null)
+        {
+            <div class="weave-medallion-backdrop" @onclick="() => ClearSelection()"></div>
+            <div class="weave-medallion">
+                <!-- Top border pattern -->
+                <div class="weave-medallion-border top"></div>
+
+                <div class="weave-medallion-inner">
+                    <div class="weave-medallion-header">
+                        <span class="weave-detail-time">@selectedCapture.CreatedAt.ToLocalTime().ToString("MMM d, yyyy · HH:mm")</span>
+                        <span class="weave-detail-close" @onclick="() => ClearSelection()">&times;</span>
+                    </div>
+
+                    <div class="weave-medallion-threads">
+                        @foreach (var link in selectedCapture.LinksFrom.Where(l => l.Reason == "tagged" && l.To != null))
+                        {
+                            var tidx = threadData.FindIndex(t => t.Thread.Id == link.ToId);
+                            <span class="weave-detail-tag" style="@(tidx >= 0 ? $"border-left:3px solid {GetThreadColor(tidx)};" : "")">
+                                @link.To.Title
+                            </span>
+                        }
+                    </div>
+
+                    @if (selectedCapture.Title != null)
+                    {
+                        <div class="weave-medallion-title">@selectedCapture.Title</div>
+                    }
+
+                    <div class="weave-medallion-body">@Truncate(selectedCapture.Body ?? "", 500)</div>
+
+                    <div class="weave-medallion-actions">
+                        <button class="btn-weave" @onclick="() => GoToEntity(selectedCapture.Id)">open full note</button>
+                    </div>
+                </div>
+
+                <!-- Bottom border pattern -->
+                <div class="weave-medallion-border bottom"></div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private int timeRange = 180;
+    private int laneHeight = 48;
+    private int svgWidth = 2000;
+    private bool loading = true;
+
+    private List<ThreadWithCaptures> threadData = [];
+    private List<Crossing> crossings = [];
+    private Dictionary<Guid, int> captureThreadCounts = [];
+    private List<TimeMarker> timeMarkers = [];
+    private Entity? selectedCapture;
+    private Guid? selectedCaptureId;
+
+    private DateTime rangeStart;
+    private DateTime rangeEnd;
+
+    private record ThreadWithCaptures(Entity Thread, List<Entity> Captures);
+    private record Crossing(Guid CaptureId, DateTime Time, List<int> ThreadIndices);
+    private record TimeMarker(int X, string Label);
+
+    // Earthy palette — inspired by Navajo/Southwest weaving
+    private static readonly string[] ThreadColors = [
+        "#8B4513",   // saddle brown
+        "#B85C38",   // terracotta
+        "#5B7553",   // sage
+        "#C4A35A",   // ochre
+        "#4A5568",   // slate/indigo
+        "#8B6914",   // dark goldenrod
+        "#6B4423",   // burnt umber
+        "#7B8B6F",   // lichen
+        "#A0522D",   // sienna
+        "#556B2F",   // dark olive
+        "#8F7B66",   // driftwood
+        "#704214",   // sepia
+        "#5F7161",   // fern
+        "#CD853F",   // peru
+        "#6E5E4E",   // bark
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task SetRange(int days)
+    {
+        timeRange = days;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        StateHasChanged();
+
+        rangeEnd = DateTime.UtcNow;
+        rangeStart = rangeEnd.AddDays(-timeRange);
+
+        var threads = await Svc.GetByType(EntityTypes.Thread);
+        threadData = [];
+        captureThreadCounts = [];
+
+        foreach (var thread in threads)
+        {
+            var captures = await Svc.GetThreadCaptures(thread.Id, 500);
+            var inRange = captures
+                .Where(c => c.CreatedAt >= rangeStart && c.CreatedAt <= rangeEnd)
+                .OrderBy(c => c.CreatedAt)
+                .ToList();
+
+            if (inRange.Count > 0)
+            {
+                threadData.Add(new ThreadWithCaptures(thread, inRange));
+            }
+
+            foreach (var cap in inRange)
+            {
+                if (!captureThreadCounts.ContainsKey(cap.Id))
+                    captureThreadCounts[cap.Id] = 0;
+                captureThreadCounts[cap.Id]++;
+            }
+        }
+
+        // Build crossings — captures that appear in multiple threads
+        var multiThreadCaptures = captureThreadCounts.Where(kv => kv.Value > 1).Select(kv => kv.Key).ToHashSet();
+        crossings = [];
+        var seen = new HashSet<Guid>();
+
+        foreach (var capId in multiThreadCaptures)
+        {
+            if (seen.Contains(capId)) continue;
+            seen.Add(capId);
+
+            var threadIndices = new List<int>();
+            Entity? cap = null;
+            for (int i = 0; i < threadData.Count; i++)
+            {
+                var found = threadData[i].Captures.FirstOrDefault(c => c.Id == capId);
+                if (found != null)
+                {
+                    threadIndices.Add(i);
+                    cap ??= found;
+                }
+            }
+
+            if (cap != null && threadIndices.Count > 1)
+            {
+                crossings.Add(new Crossing(capId, cap.CreatedAt, threadIndices));
+            }
+        }
+
+        // Time markers
+        BuildTimeMarkers();
+
+        loading = false;
+        StateHasChanged();
+    }
+
+    private void BuildTimeMarkers()
+    {
+        timeMarkers = [];
+        var step = timeRange switch
+        {
+            <= 30 => TimeSpan.FromDays(7),
+            <= 90 => TimeSpan.FromDays(14),
+            <= 180 => TimeSpan.FromDays(30),
+            _ => TimeSpan.FromDays(60),
+        };
+
+        var t = rangeStart;
+        while (t <= rangeEnd)
+        {
+            var x = TimeToX(t);
+            var label = t.ToLocalTime().ToString("MMM d");
+            timeMarkers.Add(new TimeMarker(x, label));
+            t = t.Add(step);
+        }
+    }
+
+    private int TimeToX(DateTime time)
+    {
+        var totalSpan = (rangeEnd - rangeStart).TotalSeconds;
+        if (totalSpan <= 0) return 0;
+        var position = (time - rangeStart).TotalSeconds / totalSpan;
+        return (int)(position * svgWidth);
+    }
+
+    private int GetCaptureThreadCount(Guid id) =>
+        captureThreadCounts.TryGetValue(id, out var count) ? count : 1;
+
+    private async Task ShowCapture(Guid id)
+    {
+        selectedCapture = await Svc.GetById(id);
+        selectedCaptureId = id;
+    }
+
+    private void ClearSelection()
+    {
+        selectedCapture = null;
+        selectedCaptureId = null;
+    }
+
+    private void GoToThread(Guid id) => Nav.NavigateTo($"/threads/{id}");
+    private void GoToEntity(Guid id) => Nav.NavigateTo($"/entity/{id}");
+
+    private string GetThreadColor(int index) =>
+        ThreadColors[index % ThreadColors.Length];
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+}

@@ -3,6 +3,7 @@
 @using Noto.Shared.Models
 @using Noto.Server.Components.Shared
 @inject EntityService Svc
+@inject AiConversationService AiSvc
 @inject NavigationManager Nav
 
 @if (thread == null)
@@ -93,6 +94,39 @@ else
         }
     }
 
+    <!-- Generate seed -->
+    <hr class="zen-divider" />
+    <div class="note-stream-label">seed</div>
+    @if (generatingSeed)
+    {
+        <div class="note-card" style="border-left-color:var(--matcha);">
+            <div class="note-card-meta">
+                <span class="note-type-tag tag-capture">generating...</span>
+            </div>
+            <div class="note-preview" style="-webkit-line-clamp:6;">@seedContent</div>
+        </div>
+    }
+    else if (latestSeed != null)
+    {
+        <div class="note-card" style="border-left-color:var(--matcha); cursor:pointer;" @onclick="() => GoToEntity(latestSeed.Id)">
+            <div class="note-card-meta">
+                <span class="note-type-tag tag-capture">seed</span>
+                <span class="note-time">@latestSeed.CreatedAt.ToLocalTime().ToString("MMM d HH:mm")</span>
+                <span class="note-id">@latestSeed.Id.ToString()[..8]</span>
+            </div>
+            <div class="note-preview" style="-webkit-line-clamp:4;">@latestSeed.Body</div>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+            <button class="btn-zen" style="font-size:9px;" @onclick="GenerateSeed">regenerate</button>
+        </div>
+    }
+    else
+    {
+        <button class="btn-zen primary" @onclick="GenerateSeed" style="margin-bottom:12px;">
+            ✦ generate seed from @captures.Count captures
+        </button>
+    }
+
     <hr class="zen-divider" />
     <div style="display:flex; gap:8px;">
         <button class="btn-zen" @onclick="GoBack">back to threads</button>
@@ -109,6 +143,9 @@ else
     private string? toast;
     private bool confirmDelete;
     private HashSet<Guid> taggedCaptureIds = [];
+    private Entity? latestSeed;
+    private bool generatingSeed;
+    private string seedContent = "";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -117,7 +154,71 @@ else
         {
             captures = await Svc.GetThreadCaptures(Id);
             taggedCaptureIds = captures.Select(c => c.Id).ToHashSet();
+            await FindLatestSeed();
         }
+    }
+
+    private async Task FindLatestSeed()
+    {
+        var links = await Svc.GetLinks(Id);
+        var seedLink = links
+            .Where(l => l.ToId == Id && l.Reason == "seed-of")
+            .OrderByDescending(l => l.CreatedAt)
+            .FirstOrDefault();
+        latestSeed = seedLink != null ? await Svc.GetById(seedLink.FromId) : null;
+    }
+
+    private async Task GenerateSeed()
+    {
+        if (thread == null || captures.Count == 0 || generatingSeed) return;
+
+        generatingSeed = true;
+        seedContent = "";
+        StateHasChanged();
+
+        var captureTexts = string.Join("\n\n---\n\n",
+            captures.Select(c => $"{c.Title ?? ""}\n{c.Body ?? ""}".Trim()));
+
+        var desc = thread.Body != null ? $"Thread description: {thread.Body}\n\n" : "";
+        var prompt = $"Below are {captures.Count} notes from a personal thread called \"{thread.Title}\".\n{desc}"
+            + "Synthesize these into a cohesive seed document (300-500 words) that captures:\n"
+            + "- The core themes and patterns\n"
+            + "- The emotional and intellectual arc\n"
+            + "- Key images, phrases, or insights that recur\n"
+            + "- Where this thread seems to be heading\n\n"
+            + "Write in second person, as if speaking to the person who wrote these notes.\n"
+            + "Be specific — use their language and images, not generic observations.\n\n"
+            + "Notes:\n" + captureTexts;
+
+        try
+        {
+            await foreach (var token in AiSvc.StreamResponse(
+                "You are a thoughtful synthesizer of personal notes.", [], prompt))
+            {
+                seedContent += token;
+                StateHasChanged();
+            }
+
+            // Save as capture, tag to thread, link sources
+            var seedEntity = await Svc.Create(EntityTypes.Capture, $"Seed: {thread.Title}", seedContent);
+            await Svc.TagCapture(seedEntity.Id, Id);
+            await Svc.CreateLink(seedEntity.Id, Id, "seed-of");
+            foreach (var cap in captures.Where(c => c.Id != seedEntity.Id))
+            {
+                await Svc.CreateLink(seedEntity.Id, cap.Id, "sourced-from");
+            }
+
+            latestSeed = seedEntity;
+            captures = await Svc.GetThreadCaptures(Id);
+            taggedCaptureIds = captures.Select(c => c.Id).ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            seedContent = $"[Error: {ex.Message}]";
+        }
+
+        generatingSeed = false;
+        StateHasChanged();
     }
 
     private async Task OnCapturePickedForTag(Entity picked)

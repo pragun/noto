@@ -204,6 +204,26 @@ public class EntityService
                 && e.Title.ToLower() == name.ToLower());
     }
 
+    // System prompts (stored as stash with meta.kind = "system-prompt")
+    public async Task<List<Entity>> GetSystemPrompts()
+    {
+        var all = await _db.Entities
+            .Where(e => e.Type == EntityTypes.Stash)
+            .ToListAsync();
+
+        return all.Where(e =>
+        {
+            if (e.Meta == null) return false;
+            return e.Meta.RootElement.TryGetProperty("kind", out var k) && k.GetString() == "system-prompt";
+        }).OrderBy(e => e.Title).ToList();
+    }
+
+    public async Task<Entity> CreateSystemPrompt(string name, string body)
+    {
+        var meta = System.Text.Json.JsonDocument.Parse("""{"kind":"system-prompt"}""");
+        return await Create(EntityTypes.Stash, name, body, meta);
+    }
+
     // Search (basic full-text for now, Phase 4 adds semantic)
     public async Task<List<Entity>> SearchText(string query, int limit = 20)
     {

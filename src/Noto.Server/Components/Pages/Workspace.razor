@@ -24,10 +24,65 @@
             </select>
         </div>
 
+        <!-- Thread seeds section: existing + generate -->
+        @if (!string.IsNullOrEmpty(selectedThreadId))
+        {
+            <div style="padding:8px 16px; border-bottom:1px solid rgba(255,255,255,0.07);">
+                @if (generatingSeed)
+                {
+                    <div style="font-size:9px; color:var(--matcha-2); letter-spacing:0.1em; margin-bottom:4px;">generating...</div>
+                    <div style="font-size:10px; color:rgba(244,239,228,0.5); line-height:1.4; max-height:60px; overflow:hidden;">@seedStreamContent</div>
+                }
+                else
+                {
+                    @if (threadSeeds.Count > 0)
+                    {
+                        <div style="font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:var(--slate); margin-bottom:6px;">
+                            seeds (@threadSeeds.Count)
+                        </div>
+                        @foreach (var seed in threadSeeds)
+                        {
+                            var isInjected = injectedSeeds.Any(s => s.Id == seed.Id);
+                            var sourceCount = seed.LinksFrom?.Count(l => l.Reason == "sourced-from") ?? 0;
+                            <div style="padding:8px 10px; margin-bottom:6px; border-left:2px solid @(isInjected ? "var(--matcha)" : "rgba(122,158,126,0.3)"); background:@(isInjected ? "rgba(122,158,126,0.08)" : "transparent");">
+                                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                                    <span style="font-size:8px; color:@(isInjected ? "var(--matcha-2)" : "var(--slate-2)"); letter-spacing:0.08em;">
+                                        @(isInjected ? "✓ INJECTED" : "✦ SEED") · @seed.CreatedAt.ToLocalTime().ToString("MMM d") · @sourceCount sources
+                                    </span>
+                                </div>
+                                <div style="font-size:10px; line-height:1.6; color:rgba(244,239,228,0.65); max-height:200px; overflow-y:auto; margin-bottom:8px;"
+                                     class="ws-seed-body-scroll">
+                                    @Truncate(seed.Body ?? "", 600)
+                                </div>
+                                <div style="display:flex; gap:6px;">
+                                    <button @onclick="() => ToggleSeed(seed)"
+                                            style="background:rgba(122,158,126,0.25); border:1px solid var(--matcha); color:var(--matcha-2); font-family:inherit; font-size:9px; padding:5px 12px; cursor:pointer;">
+                                        @(isInjected ? "remove" : "inject into chat")
+                                    </button>
+                                    <button @onclick="() => ViewSeedInChat(seed)"
+                                            style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.25); color:var(--parchment); font-family:inherit; font-size:9px; padding:5px 12px; cursor:pointer;">
+                                        view full
+                                    </button>
+                                    <button @onclick="() => GoToNote(seed.Id)"
+                                            style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.25); color:var(--parchment); font-family:inherit; font-size:9px; padding:5px 12px; cursor:pointer;">
+                                        open note
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                    <button style="width:100%; background:rgba(122,158,126,0.12); border:1px solid rgba(122,158,126,0.3); color:var(--matcha-2); font-family:inherit; font-size:9px; padding:5px 8px; cursor:pointer; letter-spacing:0.06em; margin-top:4px;"
+                            @onclick="GenerateSeed">
+                        ✦ @(threadSeeds.Count > 0 ? "regenerate seed" : "generate seed")
+                    </button>
+                }
+            </div>
+        }
+
         @if (injectedSeeds.Count > 0)
         {
             <div style="padding:8px 16px; border-bottom:1px solid rgba(255,255,255,0.07); font-size:9px; color:var(--matcha-2); letter-spacing:0.1em;">
-                @injectedSeeds.Count SEEDS ACTIVE
+                @injectedSeeds.Count ITEMS IN CONTEXT
                 <span style="cursor:pointer; float:right; color:var(--slate);" @onclick="() => injectedSeeds.Clear()">clear</span>
             </div>
         }
@@ -36,10 +91,11 @@
             @foreach (var cap in seedCaptures)
             {
                 var isInjected = injectedSeeds.Any(s => s.Id == cap.Id);
+                var isSeed = cap.Title?.StartsWith("Seed:") == true;
                 <div class="ws-seed-item @(isInjected ? "injected" : "")" @onclick="() => ToggleSeed(cap)">
                     <div class="ws-seed-item-meta">
-                        <span style="font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:@(isInjected ? "var(--matcha-2)" : "var(--slate)");">
-                            @(isInjected ? "✓ injected" : cap.Type)
+                        <span style="font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:@(isInjected ? "var(--matcha-2)" : isSeed ? "rgba(122,158,126,0.7)" : "var(--slate)");">
+                            @(isInjected ? "✓ injected" : isSeed ? "✦ seed" : cap.Type)
                         </span>
                     </div>
                     @if (cap.Title != null)
@@ -67,6 +123,9 @@
                 }
             </div>
             <div class="ws-topbar-actions">
+                <button class="btn-zen" style="font-size:9px; padding:4px 8px;" @onclick="TogglePromptEditor">
+                    @(showPromptEditor ? "hide prompt" : "system prompt")
+                </button>
                 @if (chatEntityId != null)
                 {
                     <button class="btn-zen" @onclick="ViewTranscript">view note</button>
@@ -78,10 +137,55 @@
             </div>
         </div>
 
+        <!-- System prompt editor -->
+        @if (showPromptEditor)
+        {
+            <div style="margin:0; padding:12px 24px; background:rgba(0,0,0,0.03); border-bottom:1px solid var(--chalk);">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span style="font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:var(--slate);">system prompt</span>
+                    <select @bind="selectedPromptId" @bind:after="OnPromptSelected"
+                            style="background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:10px; color:var(--charcoal); padding:3px 6px; outline:none;">
+                        <option value="default">default</option>
+                        @foreach (var p in savedPrompts)
+                        {
+                            <option value="@p.Id">@p.Title</option>
+                        }
+                    </select>
+                    <span style="flex:1;"></span>
+                    <button class="btn-zen" style="font-size:9px; padding:3px 8px;" @onclick="SaveCurrentPrompt">save as new</button>
+                    @if (selectedPromptId != "default")
+                    {
+                        <button class="btn-zen" style="font-size:9px; padding:3px 8px;" @onclick="UpdateCurrentPrompt">update</button>
+                    }
+                </div>
+                <textarea @bind="activePromptText" @bind:event="oninput"
+                          style="width:100%; background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:11px; color:var(--charcoal); padding:8px; outline:none; resize:vertical; line-height:1.7; min-height:100px;"
+                          rows="6"></textarea>
+            </div>
+        }
+
+        <!-- Viewing seed inline -->
+        @if (viewingSeed != null)
+        {
+            <div style="margin:12px 24px; background:rgba(74,107,78,0.06); border:1px solid rgba(122,158,126,0.2); border-left:3px solid var(--matcha); padding:14px 18px; max-height:50vh; overflow-y:auto;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                    <span style="font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:var(--matcha-dim);">
+                        ✦ @viewingSeed.Title
+                    </span>
+                    <span style="font-size:9px; color:var(--slate-2);">@viewingSeed.CreatedAt.ToLocalTime().ToString("MMM d HH:mm")</span>
+                    <span style="margin-left:auto; display:flex; gap:6px;">
+                        <button class="btn-zen" style="font-size:9px; padding:2px 8px;" @onclick="() => GoToNote(viewingSeed.Id)">open note</button>
+                        <button class="btn-zen" style="font-size:9px; padding:2px 8px;" @onclick="() => viewingSeed = null">close</button>
+                    </span>
+                </div>
+                <div class="detail-body" style="font-size:12px; line-height:1.8; margin-bottom:0;">@RenderMarkdown(viewingSeed.Body ?? "")</div>
+            </div>
+        }
+
         @if (injectedSeeds.Count > 0)
         {
             <div class="ws-context-bar">
-                <div class="ws-context-label">@injectedSeeds.Count seeds as context</div>
+                <div class="ws-context-label">@injectedSeeds.Count items as context</div>
                 @foreach (var seed in injectedSeeds)
                 {
                     <div class="ws-context-item">
@@ -113,7 +217,7 @@
                 </div>
 
                 <div class="ws-ai-response">
-                    <div class="ws-msg-label">claude</div>
+                    <div class="ws-msg-label">ai</div>
                     <div class="ws-msg-text detail-body">@RenderMarkdown(exchange.AiResponse)</div>
 
                     @if (exchange.SavedNoteId == null)
@@ -145,7 +249,7 @@
                     <div class="ws-msg-text" style="white-space:pre-wrap;">@currentUserMsg</div>
                 </div>
                 <div class="ws-ai-response streaming">
-                    <div class="ws-msg-label">claude</div>
+                    <div class="ws-msg-label">ai</div>
                     <div class="ws-msg-text detail-body">@RenderMarkdown(streamingContent)</div>
                 </div>
             }
@@ -170,6 +274,15 @@
     private string selectedThreadId = "";
     private List<Entity> seedCaptures = [];
     private List<Entity> injectedSeeds = [];
+    private List<Entity> threadSeeds = [];
+    private bool generatingSeed;
+    private string seedStreamContent = "";
+    private Entity? viewingSeed;
+
+    private bool showPromptEditor;
+    private string activePromptText = "";
+    private string selectedPromptId = "default";
+    private List<Entity> savedPrompts = [];
 
     private string chatTitle = "";
     private Guid? chatEntityId;
@@ -191,15 +304,100 @@
     protected override async Task OnInitializedAsync()
     {
         threads = await Svc.GetByType(EntityTypes.Thread);
+        savedPrompts = await Svc.GetSystemPrompts();
+        activePromptText = AiSvc.DefaultPrompt;
         await LoadThreadCaptures();
     }
 
     private async Task LoadThreadCaptures()
     {
+        threadSeeds = [];
+
         if (string.IsNullOrEmpty(selectedThreadId))
+        {
             seedCaptures = await Svc.GetStream(0, 50, EntityTypes.Capture);
+        }
         else
-            seedCaptures = await Svc.GetThreadCaptures(Guid.Parse(selectedThreadId), 50);
+        {
+            var threadId = Guid.Parse(selectedThreadId);
+            seedCaptures = await Svc.GetThreadCaptures(threadId, 50);
+
+            // Find existing seeds for this thread
+            var links = await Svc.GetLinks(threadId);
+            var seedIds = links
+                .Where(l => l.ToId == threadId && l.Reason == "seed-of")
+                .OrderByDescending(l => l.CreatedAt)
+                .Select(l => l.FromId)
+                .ToList();
+
+            foreach (var seedId in seedIds)
+            {
+                var seed = await Svc.GetById(seedId);
+                if (seed != null) threadSeeds.Add(seed);
+            }
+        }
+    }
+
+    private async Task GenerateSeed()
+    {
+        if (string.IsNullOrEmpty(selectedThreadId) || generatingSeed) return;
+
+        generatingSeed = true;
+        seedStreamContent = "";
+        StateHasChanged();
+
+        try
+        {
+            var threadId = Guid.Parse(selectedThreadId);
+            var thread = await Svc.GetById(threadId);
+            var captures = seedCaptures.Where(c => c.Title?.StartsWith("Seed:") != true).ToList();
+
+            if (captures.Count == 0 || thread == null)
+            {
+                generatingSeed = false;
+                return;
+            }
+
+            var captureTexts = string.Join("\n\n---\n\n",
+                captures.Select(c => $"{c.Title ?? ""}\n{c.Body ?? ""}".Trim()));
+
+            var desc = thread.Body != null ? $"Thread description: {thread.Body}\n\n" : "";
+            var prompt = $"Below are {captures.Count} notes from a personal thread called \"{thread.Title}\".\n{desc}"
+                + "Synthesize these into a cohesive seed document (300-500 words) that captures:\n"
+                + "- The core themes and patterns\n"
+                + "- The emotional and intellectual arc\n"
+                + "- Key images, phrases, or insights that recur\n"
+                + "- Where this thread seems to be heading\n\n"
+                + "Write in second person, as if speaking to the person who wrote these notes.\n"
+                + "Be specific — use their language and images, not generic observations.\n\n"
+                + "Notes:\n" + captureTexts;
+
+            await foreach (var token in AiSvc.StreamResponse(
+                "You are a thoughtful synthesizer of personal notes.", [], prompt))
+            {
+                seedStreamContent += token;
+                StateHasChanged();
+            }
+
+            // Save as capture, tag to thread, link sources
+            var seedEntity = await Svc.Create(EntityTypes.Capture, $"Seed: {thread.Title}", seedStreamContent);
+            await Svc.TagCapture(seedEntity.Id, threadId);
+            await Svc.CreateLink(seedEntity.Id, threadId, "seed-of");
+            foreach (var cap in captures)
+            {
+                await Svc.CreateLink(seedEntity.Id, cap.Id, "sourced-from");
+            }
+
+            // Refresh
+            await LoadThreadCaptures();
+        }
+        catch (Exception ex)
+        {
+            seedStreamContent = $"[Error: {ex.Message}]";
+        }
+
+        generatingSeed = false;
+        StateHasChanged();
     }
 
     private void ToggleSeed(Entity cap)
@@ -231,7 +429,7 @@
             .Select(s => (s.Title ?? "untitled", s.Body ?? ""))
             .ToList();
 
-        var systemPrompt = AiSvc.BuildSystemPromptWithSeeds(seeds);
+        var systemPrompt = AiSvc.BuildSystemPromptWithSeeds(seeds, activePromptText);
 
         try
         {
@@ -253,7 +451,6 @@
         isStreaming = false;
         currentUserMsg = "";
 
-        // Auto-save transcript after every exchange
         await AutoSaveTranscript();
 
         streamingContent = "";
@@ -293,6 +490,39 @@
         StateHasChanged();
     }
 
+    private void TogglePromptEditor() => showPromptEditor = !showPromptEditor;
+
+    private void OnPromptSelected()
+    {
+        if (selectedPromptId == "default")
+        {
+            activePromptText = AiSvc.DefaultPrompt;
+        }
+        else
+        {
+            var prompt = savedPrompts.FirstOrDefault(p => p.Id.ToString() == selectedPromptId);
+            if (prompt != null)
+                activePromptText = prompt.Body ?? "";
+        }
+    }
+
+    private async Task SaveCurrentPrompt()
+    {
+        var name = $"prompt · {DateTime.Now:MMM d HH:mm}";
+        var entity = await Svc.CreateSystemPrompt(name, activePromptText);
+        savedPrompts = await Svc.GetSystemPrompts();
+        selectedPromptId = entity.Id.ToString();
+    }
+
+    private async Task UpdateCurrentPrompt()
+    {
+        if (selectedPromptId == "default") return;
+        var id = Guid.Parse(selectedPromptId);
+        await Svc.Update(id, body: activePromptText);
+        savedPrompts = await Svc.GetSystemPrompts();
+    }
+
+    private void ViewSeedInChat(Entity seed) => viewingSeed = seed;
     private void GoToNote(Guid id) => Nav.NavigateTo($"/entity/{id}");
     private void ViewTranscript() => Nav.NavigateTo($"/entity/{chatEntityId}");
 
