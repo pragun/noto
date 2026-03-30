@@ -24,6 +24,9 @@ appsettings.*.json
 .DS_Store
 Thumbs.db
 
+# Certs (generated locally)
+certs/
+
 # Data (never in repo)
 noto-data/
 

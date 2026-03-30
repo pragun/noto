@@ -2,6 +2,7 @@
 @using Noto.Server.Services
 @using Noto.Shared.Models
 @inject EntityService Svc
+@inject IJSRuntime JS
 
 <div class="page-date">@DateTime.Now.ToString("dddd · MMMM d, yyyy")</div>
 <div class="page-title">stream</div>
@@ -46,7 +47,15 @@ else
             lastDay = day;
         }
 
-        <div class="note-card @GetTypeClass(e.Type)" @onclick="() => ViewEntity(e.Id)">
+        <div class="note-card @GetTypeClass(e.Type)" style="position:relative;" @onclick="() => ViewEntity(e.Id)">
+            @if (shiftHeld)
+            {
+                <button class="shift-delete-btn"
+                        @onclick:stopPropagation="true"
+                        @onclick="() => QuickDelete(e.Id)">
+                    &times;
+                </button>
+            }
             <div class="note-card-meta">
                 <span class="note-type-tag @GetTagClass(e.Type)">@e.Type</span>
                 <span class="note-time">@e.CreatedAt.ToLocalTime().ToString("HH:mm")</span>
@@ -90,6 +99,30 @@ else
     private string newBody = "";
     private string newTitle = "";
     private string? toast;
+    private bool shiftHeld;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("noto.registerShiftWatch",
+                DotNetObjectReference.Create(this));
+        }
+    }
+
+    [JSInvokable]
+    public void OnShiftChanged(bool pressed)
+    {
+        shiftHeld = pressed;
+        StateHasChanged();
+    }
+
+    private async Task QuickDelete(Guid id)
+    {
+        await Svc.Delete(id);
+        await LoadEntities();
+        await ShowToast("deleted");
+    }
 
     protected override async Task OnInitializedAsync()
     {

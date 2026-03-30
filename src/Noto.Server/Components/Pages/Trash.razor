@@ -1,0 +1,83 @@
+@page "/trash"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+<div class="page-date">manage</div>
+<div class="page-title">trash</div>
+
+@if (items.Count > 0)
+{
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <button class="btn-zen danger" @onclick="EmptyAll">
+            @(confirmEmpty ? "confirm empty trash" : "empty trash")
+        </button>
+        <span style="font-size:10px; color:var(--slate); align-self:center;">@items.Count items</span>
+    </div>
+}
+
+@if (items.Count == 0)
+{
+    <div class="empty-state">
+        <div class="icon">⊘</div>
+        <p>trash is empty</p>
+    </div>
+}
+else
+{
+    @foreach (var e in items)
+    {
+        <div class="note-card" style="opacity:0.7; border-left-color:rgba(176,64,64,0.3);">
+            <div class="note-card-meta">
+                <span class="note-type-tag">@e.Type</span>
+                <span class="note-time">deleted @e.DeletedAt?.ToLocalTime().ToString("MMM d HH:mm")</span>
+            </div>
+            @if (e.Title != null)
+            {
+                <div class="note-title">@e.Title</div>
+            }
+            @if (e.Body != null)
+            {
+                <div class="note-preview">@Truncate(e.Body, 120)</div>
+            }
+            <div style="display:flex; gap:6px; margin-top:8px;">
+                <button class="btn-zen" style="font-size:9px; padding:4px 10px;" @onclick="() => Restore(e.Id)">restore</button>
+                <button class="btn-zen danger" style="font-size:9px; padding:4px 10px;" @onclick="() => PermanentDelete(e.Id)">delete forever</button>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private List<Entity> items = [];
+    private bool confirmEmpty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        items = await Svc.GetTrash();
+    }
+
+    private async Task Restore(Guid id)
+    {
+        await Svc.Restore(id);
+        items = await Svc.GetTrash();
+    }
+
+    private async Task PermanentDelete(Guid id)
+    {
+        await Svc.PermanentDelete(id);
+        items = await Svc.GetTrash();
+    }
+
+    private async Task EmptyAll()
+    {
+        if (!confirmEmpty) { confirmEmpty = true; return; }
+        await Svc.EmptyTrash();
+        items = await Svc.GetTrash();
+        confirmEmpty = false;
+    }
+
+    private string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "...";
+}

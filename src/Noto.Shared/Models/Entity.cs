@@ -11,6 +11,7 @@ public class Entity
     public string? Title { get; set; }
     public string? Body { get; set; }
     public JsonDocument? Meta { get; set; }
+    public DateTime? DeletedAt { get; set; }
 
     public List<Attachment> Attachments { get; set; } = [];
     public List<Link> LinksFrom { get; set; } = [];

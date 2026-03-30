@@ -246,6 +246,30 @@ body {
     letter-spacing: 0.05em;
 }
 
+/* ── Shift-delete button ─────────────────────────── */
+.shift-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: rgba(176,64,64,0.12);
+    border: 1px solid rgba(176,64,64,0.3);
+    color: #b04040;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: background 0.1s;
+}
+
+.shift-delete-btn:hover {
+    background: rgba(176,64,64,0.25);
+}
+
 /* ── Stream day separator ────────────────────────── */
 .stream-day-sep {
     font-size: 9px;
@@ -1585,6 +1609,241 @@ body {
 
 .ws-prompt-send:hover { background: var(--matcha-2); }
 .ws-prompt-send:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Mobile Capture ──────────────────────────────── */
+.cap-layout {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.cap-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--chalk);
+}
+
+.cap-tab {
+    flex: 1;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 14px 0;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--slate);
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    margin-bottom: -2px;
+}
+
+.cap-tab:hover { color: var(--charcoal); }
+
+.cap-tab.active {
+    color: var(--matcha-dim);
+    border-bottom-color: var(--matcha);
+}
+
+.cap-body {
+    padding: 24px 20px;
+}
+
+.cap-textarea {
+    width: 100%;
+    background: rgba(255,255,255,0.55);
+    border: 1px solid var(--chalk);
+    font-family: inherit;
+    font-size: 15px;
+    color: var(--charcoal);
+    padding: 14px 16px;
+    outline: none;
+    resize: vertical;
+    line-height: 1.8;
+    min-height: 120px;
+}
+
+.cap-textarea:focus { border-color: var(--matcha-2); }
+.cap-textarea::placeholder { color: var(--chalk); }
+
+.cap-title-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--chalk);
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--charcoal);
+    padding: 10px 0;
+    outline: none;
+    margin-top: 10px;
+}
+
+.cap-title-input::placeholder { color: var(--slate-2); }
+.cap-title-input:focus { border-bottom-color: var(--matcha-2); }
+
+.cap-submit {
+    width: 100%;
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--matcha);
+    border: none;
+    color: var(--charcoal);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cap-submit:hover { background: var(--matcha-2); }
+.cap-submit:disabled { opacity: 0.4; cursor: default; }
+
+/* Voice */
+.cap-voice-start {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 0;
+}
+
+.cap-record-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.55);
+    border: 3px solid var(--chalk);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cap-record-btn:hover { border-color: var(--matcha); }
+.cap-record-btn:active { transform: scale(0.95); }
+
+.cap-record-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #b04040;
+}
+
+.cap-recording {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 0;
+    gap: 8px;
+}
+
+.cap-recording-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #b04040;
+    animation: cap-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes cap-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.1); }
+}
+
+.cap-recording-text {
+    font-size: 11px;
+    color: #b04040;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.cap-recording-time {
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--charcoal);
+}
+
+.cap-voice-preview {
+    padding: 10px 0;
+}
+
+/* Photo */
+.cap-photo-pick {
+    display: flex;
+    justify-content: center;
+    padding: 30px 0;
+}
+
+.cap-photo-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 40px;
+    border: 2px dashed var(--chalk);
+    cursor: pointer;
+    transition: border-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cap-photo-btn:hover { border-color: var(--matcha-2); }
+
+.cap-photo-icon {
+    font-size: 36px;
+    color: var(--slate);
+}
+
+.cap-photo-preview {
+    padding: 10px 0;
+}
+
+/* Saved state */
+.cap-saved {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+    gap: 8px;
+}
+
+.cap-saved-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--matcha);
+    color: var(--charcoal);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cap-saved-text {
+    font-size: 14px;
+    color: var(--charcoal);
+    letter-spacing: 0.06em;
+}
+
+.cap-saved-id {
+    font-size: 10px;
+    color: var(--slate);
+}
+
+.cap-saved-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+/* Hide sidebar on mobile-width for capture page */
+@media (max-width: 700px) {
+    .sidebar { display: none; }
+    .main-wrap { margin-left: 0; }
+}
 
 /* ── Scrollbar ───────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }

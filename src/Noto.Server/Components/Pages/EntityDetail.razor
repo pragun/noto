@@ -54,6 +54,26 @@ else
         }
     }
 
+    <!-- Attachments (photos, audio) -->
+    @if (entity.Attachments.Count > 0)
+    {
+        @foreach (var att in entity.Attachments)
+        {
+            @if (att.Kind == "image")
+            {
+                <div style="margin-bottom:16px;">
+                    <img src="/api/attachments/@att.Id" style="max-width:100%; max-height:50vh; border:1px solid var(--chalk);" />
+                </div>
+            }
+            else if (att.Kind == "audio")
+            {
+                <div style="margin-bottom:16px;">
+                    <audio controls src="/api/attachments/@att.Id" style="width:100%;"></audio>
+                </div>
+            }
+        }
+    }
+
     <!-- Thread tags -->
     <div style="margin-top:20px;">
         <div class="note-stream-label">threads</div>

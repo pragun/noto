@@ -28,6 +28,7 @@ public class NotoDbContext : DbContext
             e.Property(x => x.Title).HasColumnName("title");
             e.Property(x => x.Body).HasColumnName("body");
             e.Property(x => x.Meta).HasColumnName("meta").HasColumnType("jsonb");
+            e.Property(x => x.DeletedAt).HasColumnName("deleted_at");
 
             e.HasIndex(x => new { x.Type, x.CreatedAt }).HasDatabaseName("idx_entities_type_created")
                 .IsDescending(false, true);

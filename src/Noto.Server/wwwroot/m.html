@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>nōto · capture</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root { --charcoal:#2e2e2e; --slate:#636e72; --slate-2:#8a9ba8; --matcha:#7a9e7e; --matcha-2:#a8c5aa; --matcha-dim:#4a6b4e; --parchment:#f4efe4; --chalk:#dad4c8; --amber:#C4A35A; --red:#b04040; }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:'JetBrains Mono',monospace; background:var(--parchment); color:var(--charcoal); font-size:14px; min-height:100vh; -webkit-text-size-adjust:100%; }
+
+        .header { padding:14px 20px; border-bottom:1px solid var(--chalk); display:flex; align-items:center; gap:8px; }
+        .brand { font-size:15px; font-weight:500; letter-spacing:0.04em; }
+        .sub { font-size:9px; color:var(--slate); letter-spacing:0.12em; text-transform:uppercase; }
+        .mode-toggle { margin-left:auto; display:flex; align-items:center; gap:6px; }
+        .mode-btn { font-family:inherit; font-size:9px; letter-spacing:0.08em; padding:4px 10px; border:1px solid var(--chalk); background:transparent; color:var(--slate); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+        .mode-btn.offline { background:rgba(176,64,64,0.1); border-color:rgba(176,64,64,0.3); color:var(--red); }
+        .mode-btn.online { background:rgba(122,158,126,0.15); border-color:var(--matcha); color:var(--matcha-dim); }
+        .queue-count { font-size:9px; padding:3px 8px; background:rgba(196,163,90,0.15); border:1px solid rgba(196,163,90,0.3); color:#8B6914; cursor:pointer; }
+
+        .view-tabs { display:flex; border-bottom:2px solid var(--chalk); }
+        .view-tab { flex:1; padding:12px 0; text-align:center; font-family:inherit; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; background:none; border:none; border-bottom:2px solid transparent; color:var(--slate); cursor:pointer; margin-bottom:-2px; -webkit-tap-highlight-color:transparent; }
+        .view-tab.active { color:var(--matcha-dim); border-bottom-color:var(--matcha); }
+
+        .view { display:none; }
+        .view.active { display:block; }
+
+        textarea, input[type=text] { width:100%; font-family:inherit; font-size:15px; color:var(--charcoal); background:rgba(255,255,255,0.55); border:1px solid var(--chalk); padding:12px 14px; outline:none; -webkit-appearance:none; }
+        textarea { min-height:100px; resize:vertical; line-height:1.8; }
+        textarea:focus, input:focus { border-color:var(--matcha-2); }
+        textarea::placeholder, input::placeholder { color:var(--chalk); }
+        .title-input { background:transparent; border:none; border-bottom:1px solid var(--chalk); padding:8px 0; font-size:12px; }
+
+        .btn { font-family:inherit; font-size:11px; padding:10px 16px; border:1px solid var(--chalk); background:transparent; color:var(--slate); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+        .btn:active { background:rgba(0,0,0,0.03); }
+        .btn-primary { width:100%; padding:16px; background:var(--matcha); border:none; color:var(--charcoal); font-size:13px; font-weight:500; letter-spacing:0.08em; text-transform:uppercase; }
+        .btn-primary:disabled { opacity:0.4; }
+        .btn-primary.queue-style { background:var(--amber); }
+        .btn-danger { border-color:rgba(176,64,64,0.3); color:var(--red); }
+        .btn-row { display:flex; gap:8px; }
+
+        /* ── Capture form ── */
+        .cap-form { padding:20px; }
+        .cap-section { margin-bottom:16px; }
+        .cap-section-label { font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:var(--slate); margin-bottom:6px; }
+
+        .add-btns { display:flex; gap:8px; margin-bottom:16px; }
+        .add-btn { flex:1; padding:12px; border:2px dashed var(--chalk); background:transparent; font-family:inherit; font-size:11px; color:var(--slate); cursor:pointer; text-align:center; -webkit-tap-highlight-color:transparent; }
+        .add-btn:active { border-color:var(--matcha); }
+
+        /* Attachments list */
+        .att-list { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+        .att-item { display:flex; align-items:center; gap:10px; padding:8px 10px; background:rgba(255,255,255,0.5); border:1px solid var(--chalk); }
+        .att-item img { width:60px; height:60px; object-fit:cover; border:1px solid var(--chalk); }
+        .att-item audio { flex:1; height:32px; }
+        .att-item .att-info { flex:1; font-size:10px; color:var(--slate); overflow:hidden; }
+        .att-remove { font-size:16px; color:var(--slate); cursor:pointer; padding:4px 8px; -webkit-tap-highlight-color:transparent; }
+        .att-remove:active { color:var(--red); }
+
+        /* Recording */
+        .rec-overlay { position:fixed; inset:0; background:rgba(46,46,46,0.9); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+        .rec-dot { width:16px; height:16px; border-radius:50%; background:var(--red); animation:pulse 1.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.1)} }
+        .rec-time { font-size:32px; font-weight:300; color:var(--parchment); margin:16px 0; }
+        .rec-stop { padding:16px 40px; background:var(--red); border:none; color:var(--parchment); font-family:inherit; font-size:14px; cursor:pointer; }
+
+        /* Success */
+        .success { text-align:center; padding:50px 20px; }
+        .success-icon { width:48px; height:48px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:22px; color:var(--charcoal); }
+
+        /* Queue */
+        .queue-panel { padding:16px 20px; }
+        .q-item { background:rgba(255,255,255,0.55); border:1px solid var(--chalk); border-left:3px solid var(--amber); padding:10px 12px; margin-bottom:8px; }
+        .q-type { font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:var(--amber); }
+        .q-text { font-size:11px; color:var(--charcoal); line-height:1.5; margin:4px 0; max-height:40px; overflow:hidden; }
+        .q-photos { display:flex; gap:4px; margin:4px 0; }
+        .q-photos img { width:40px; height:40px; object-fit:cover; border:1px solid var(--chalk); }
+        .q-time { font-size:8px; color:var(--slate); }
+        .q-actions { display:flex; gap:6px; margin-top:6px; }
+
+        .empty-msg { text-align:center; padding:40px; color:var(--slate); font-size:11px; }
+        .hidden { display:none !important; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <span class="brand">nōto</span>
+    <span class="sub">capture</span>
+    <span id="ver" style="font-size:7px; color:rgba(99,110,114,0.4); margin-left:4px; align-self:flex-end;"></span>
+    <div class="mode-toggle">
+        <span id="queue-count" class="queue-count hidden" onclick="showView('queue')"></span>
+        <button id="mode-btn" class="mode-btn online" onclick="toggleMode()">online</button>
+    </div>
+</div>
+
+<div class="view-tabs">
+    <button class="view-tab active" onclick="showView('capture')">capture</button>
+    <button class="view-tab" onclick="showView('queue')">queue</button>
+</div>
+
+<div id="error" style="color:var(--red); font-size:11px; padding:8px 20px; display:none;"></div>
+
+<!-- ── CAPTURE VIEW ── -->
+<div id="view-capture" class="view active">
+    <div class="cap-form">
+        <div class="cap-section">
+            <textarea id="cap-body" placeholder="what's on your mind..." oninput="checkSubmit()"></textarea>
+            <input type="text" id="cap-title" class="title-input" placeholder="title (optional)" style="margin-top:8px;">
+        </div>
+
+        <div class="add-btns">
+            <label class="add-btn">
+                <input type="file" accept="image/*" capture="environment" multiple onchange="addPhotos(this)" style="display:none;">
+                ⊡ photo
+            </label>
+            <button class="add-btn" onclick="startRecording()">◎ voice</button>
+        </div>
+
+        <div id="att-list" class="att-list"></div>
+
+        <div id="edit-bar" class="hidden" style="margin-bottom:8px;">
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+                <button class="btn" onclick="cancelEdit()">cancel</button>
+                <span style="flex:1; font-size:9px; color:var(--amber);">editing queued item</span>
+                <button class="btn btn-danger" onclick="deleteEditing()">delete from queue</button>
+            </div>
+        </div>
+        <button class="btn btn-primary" id="cap-submit" disabled onclick="submitCapture()">capture</button>
+    </div>
+</div>
+
+<!-- ── RECORDING OVERLAY ── -->
+<div id="rec-overlay" class="rec-overlay hidden">
+    <div class="rec-dot"></div>
+    <div class="rec-time" id="rec-time">0:00</div>
+    <button class="rec-stop" onclick="stopRecording()">stop</button>
+</div>
+
+<!-- ── SUCCESS VIEW ── -->
+<div id="view-success" class="view">
+    <div class="success">
+        <div class="success-icon" id="suc-icon" style="background:var(--matcha);">✓</div>
+        <div id="suc-text" style="font-size:14px; margin-top:10px;">captured</div>
+        <div id="suc-detail" style="font-size:10px; color:var(--slate); margin-top:4px;"></div>
+        <div class="btn-row" style="justify-content:center; margin-top:16px;">
+            <button class="btn" onclick="resetCapture()">another</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── QUEUE VIEW ── -->
+<div id="view-queue" class="view">
+    <div class="queue-panel">
+        <div id="q-storage" style="font-size:9px; color:var(--slate); margin-bottom:12px; padding:8px 10px; background:rgba(0,0,0,0.03); border:1px solid var(--chalk);"></div>
+        <div id="q-list"></div>
+        <div id="q-empty" class="empty-msg">queue is empty</div>
+        <div id="q-actions" class="hidden" style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="syncQueue()">sync all to server</button>
+            <button class="btn btn-danger" onclick="clearQueue()" style="margin-top:8px; width:100%;">clear entire queue</button>
+        </div>
+    </div>
+</div>
+
+
+<script>
+// ── State ──
+var offlineMode = false;
+var queue = []; // loaded from IndexedDB on init
+var attachments = [];
+var editingIdx = -1;
+var idb = null; // IndexedDB handle
+
+// ── IndexedDB ──
+function openIDB() {
+    return new Promise(function(resolve, reject) {
+        if (idb) { resolve(idb); return; }
+        var req = indexedDB.open('noto-capture', 2);
+        req.onupgradeneeded = function(e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains('queue')) {
+                db.createObjectStore('queue', { keyPath: 'id' });
+            }
+        };
+        req.onsuccess = function(e) { idb = e.target.result; resolve(idb); };
+        req.onerror = function(e) { reject(new Error('IndexedDB: ' + (e.target.error || 'failed'))); };
+    });
+}
+
+function idbGetAll() {
+    return openIDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('queue', 'readonly');
+            var req = tx.objectStore('queue').getAll();
+            req.onsuccess = function() { resolve(req.result || []); };
+            req.onerror = function() { resolve([]); };
+        });
+    });
+}
+
+function idbPut(item) {
+    return openIDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('queue', 'readwrite');
+            tx.objectStore('queue').put(item);
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function(e) { reject(new Error('IDB write failed: ' + (e.target.error || 'unknown'))); };
+        });
+    });
+}
+
+function idbDelete(id) {
+    return openIDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('queue', 'readwrite');
+            tx.objectStore('queue').delete(id);
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { resolve(); }; // don't fail on delete
+        });
+    });
+}
+
+function idbClear() {
+    return openIDB().then(function(db) {
+        return new Promise(function(resolve) {
+            var tx = db.transaction('queue', 'readwrite');
+            tx.objectStore('queue').clear();
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { resolve(); };
+        });
+    });
+}
+
+async function idbEstimateUsage() {
+    if (navigator.storage && navigator.storage.estimate) {
+        var est = await navigator.storage.estimate();
+        return { used: est.usage || 0, quota: est.quota || 0 };
+    }
+    return { used: 0, quota: 0 };
+}
+
+// ── Mode ──
+function toggleMode() {
+    offlineMode = !offlineMode;
+    var b = document.getElementById('mode-btn');
+    b.textContent = offlineMode ? 'offline' : 'online';
+    b.className = 'mode-btn ' + (offlineMode ? 'offline' : 'online');
+}
+
+// ── Views ──
+function showView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('view-' + name).classList.add('active');
+    var tab = document.querySelector('.view-tab[onclick*="' + name + '"]');
+    if (tab) tab.classList.add('active');
+    if (name === 'queue') renderQueue();
+}
+
+function showErr(msg) {
+    var el = document.getElementById('error');
+    el.textContent = msg; el.style.display = msg ? 'block' : 'none';
+}
+
+// ── Attachments ──
+function addPhotos(input) {
+    Array.from(input.files).forEach(function(file) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var full = e.target.result;
+            var base64 = full.split(',')[1];
+            // Make thumbnail
+            var img = new Image();
+            img.onload = function() {
+                var c = document.createElement('canvas');
+                var sz = 120;
+                c.width = sz; c.height = sz;
+                var ctx = c.getContext('2d');
+                var s = Math.min(img.width, img.height);
+                ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, sz, sz);
+                var thumb = c.toDataURL('image/jpeg', 0.5);
+                attachments.push({ type:'photo', base64:base64, mime:file.type, name:file.name, thumb:thumb, full:full });
+                renderAttachments();
+                checkSubmit();
+            };
+            img.src = full;
+        };
+        reader.readAsDataURL(file);
+    });
+    input.value = '';
+}
+
+function removeAtt(idx) {
+    if (attachments[idx].blobUrl) URL.revokeObjectURL(attachments[idx].blobUrl);
+    attachments.splice(idx, 1);
+    renderAttachments();
+    checkSubmit();
+}
+
+function renderAttachments() {
+    var el = document.getElementById('att-list');
+    if (!attachments.length) { el.innerHTML = ''; return; }
+    el.innerHTML = attachments.map(function(a, i) {
+        if (a.type === 'photo') {
+            return '<div class="att-item"><img src="' + a.thumb + '"><div class="att-info">' + (a.name||'photo') + '</div><span class="att-remove" onclick="removeAtt('+i+')">&times;</span></div>';
+        } else {
+            return '<div class="att-item"><audio controls src="' + a.blobUrl + '"></audio><span class="att-remove" onclick="removeAtt('+i+')">&times;</span></div>';
+        }
+    }).join('');
+}
+
+function checkSubmit() {
+    var hasText = document.getElementById('cap-body').value.trim().length > 0;
+    var hasAtt = attachments.length > 0;
+    document.getElementById('cap-submit').disabled = !(hasText || hasAtt);
+}
+
+// ── Recording ──
+var mediaRec = null, audioChunks = [], recTimer = null, recSec = 0;
+
+// Detect best audio format for this browser
+var audioMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+    : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+    : '';
+var audioExt = audioMime.includes('mp4') ? '.m4a' : '.webm';
+
+async function startRecording() {
+    try {
+        var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        var opts = audioMime ? { mimeType: audioMime } : {};
+        mediaRec = new MediaRecorder(stream, opts);
+        var actualMime = mediaRec.mimeType || audioMime || 'audio/webm';
+        audioChunks = []; recSec = 0;
+        mediaRec.ondataavailable = function(e) { if (e.data.size>0) audioChunks.push(e.data); };
+        mediaRec.onstop = function() {
+            stream.getTracks().forEach(function(t){t.stop();});
+            var blob = new Blob(audioChunks, { type: actualMime });
+            var url = URL.createObjectURL(blob);
+            var reader = new FileReader();
+            reader.onloadend = function() {
+                attachments.push({ type:'audio', base64:reader.result.split(',')[1], blobUrl:url, mime:actualMime, ext:audioExt });
+                renderAttachments();
+                checkSubmit();
+            };
+            reader.readAsDataURL(blob);
+            document.getElementById('rec-overlay').classList.add('hidden');
+        };
+        mediaRec.start();
+        document.getElementById('rec-overlay').classList.remove('hidden');
+        document.getElementById('rec-time').textContent = '0:00';
+        recTimer = setInterval(function() {
+            recSec++;
+            document.getElementById('rec-time').textContent = Math.floor(recSec/60)+':'+(recSec%60<10?'0':'')+recSec%60;
+        }, 1000);
+    } catch(e) { showErr('microphone denied'); }
+}
+
+function stopRecording() {
+    if (recTimer) { clearInterval(recTimer); recTimer = null; }
+    if (mediaRec) mediaRec.stop();
+}
+
+// ── Submit ──
+async function submitCapture() {
+    // If editing a queue item, save back and return
+    if (editingIdx >= 0) {
+        finishEdit();
+        return;
+    }
+
+    var body = document.getElementById('cap-body').value.trim();
+    var title = document.getElementById('cap-title').value.trim();
+
+    var captureData = {
+        body: body || null,
+        title: title || null,
+        photos: attachments.filter(a => a.type==='photo').map(a => ({ base64:a.base64, mime:a.mime, name:a.name, thumb:a.thumb })),
+        audios: attachments.filter(a => a.type==='audio').map(a => ({ base64:a.base64, mime:a.mime||'audio/webm', ext:a.ext||'.webm' })),
+    };
+
+    if (offlineMode) {
+        try {
+            await addToQueue(captureData);
+        } catch(e) {
+            showErr('queue save failed: ' + e.message);
+            return;
+        }
+        resetForm();
+        showSuccess(true);
+        return;
+    }
+
+    // Online — single unified upload
+    try {
+        var f = new FormData();
+        if (captureData.body) f.append('body', captureData.body);
+        if (captureData.title) f.append('title', captureData.title);
+
+        // Add all photos as files
+        for (var p of captureData.photos) {
+            var bytes = Uint8Array.from(atob(p.base64), c => c.charCodeAt(0));
+            f.append('file', new Blob([bytes], {type:p.mime}), p.name || 'photo.jpg');
+        }
+
+        // Add all audio as files
+        for (var a of captureData.audios) {
+            var bytes = Uint8Array.from(atob(a.base64), c => c.charCodeAt(0));
+            f.append('file', new Blob([bytes], {type:a.mime||'audio/webm'}), 'recording' + (a.ext||'.webm'));
+        }
+
+        var res = await fetchTimeout('/api/capture', f);
+        showSuccess(false, res.id);
+        resetForm();
+    } catch(e) {
+        // Failed — queue it
+        try { await addToQueue(captureData); } catch(qe) { showErr('upload and queue both failed: ' + e.message); return; }
+        resetForm();
+        showSuccess(true);
+    }
+}
+
+async function fetchTimeout(url, formData) {
+    var ctrl = new AbortController();
+    var t = setTimeout(() => ctrl.abort(), 30000);
+    var res = await fetch(url, { method:'POST', body:formData, signal:ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) throw new Error(res.status);
+    return await res.json();
+}
+
+function showSuccess(queued, id) {
+    document.getElementById('suc-icon').style.background = queued ? 'var(--amber)' : 'var(--matcha)';
+    document.getElementById('suc-icon').textContent = queued ? '↻' : '✓';
+    document.getElementById('suc-text').textContent = queued ? 'saved to queue' : 'captured';
+    document.getElementById('suc-detail').textContent = queued ? queue.length + ' items waiting' : (id ? id.substring(0,8) : '');
+    showView('success');
+}
+
+function resetForm() {
+    document.getElementById('cap-body').value = '';
+    document.getElementById('cap-title').value = '';
+    attachments.forEach(a => { if (a.blobUrl) URL.revokeObjectURL(a.blobUrl); });
+    attachments = [];
+    renderAttachments();
+    checkSubmit();
+}
+
+function resetCapture() {
+    resetForm();
+    showView('capture');
+}
+
+// ── Queue ──
+async function addToQueue(data) {
+    var item = { data:data, timestamp:new Date().toISOString(), id:Date.now()+Math.random() };
+    await idbPut(item);
+    queue.push(item);
+    updateBadge();
+    updateStorage();
+}
+
+async function removeQ(id) {
+    await idbDelete(id);
+    queue = queue.filter(q => q.id !== id);
+    renderQueue();
+    updateBadge();
+    updateStorage();
+}
+
+async function clearQueue() {
+    if (!confirm('Delete all ' + queue.length + ' queued items?')) return;
+    await idbClear();
+    queue = [];
+    renderQueue();
+    updateBadge();
+    updateStorage();
+}
+
+async function updateStorage() {
+    var el = document.getElementById('q-storage');
+    if (!el) return;
+    var est = await idbEstimateUsage();
+    var usedMB = (est.used / 1024 / 1024).toFixed(1);
+    var quotaMB = (est.quota / 1024 / 1024).toFixed(0);
+    var pct = est.quota > 0 ? Math.min(100, (est.used / est.quota) * 100).toFixed(0) : '?';
+    el.innerHTML = 'storage: ' + usedMB + 'MB / ' + quotaMB + 'MB (' + pct + '%) · ' + queue.length + ' items'
+        + (queue.length > 0 ? ' · <span style="cursor:pointer;text-decoration:underline;" onclick="clearQueue()">clear queue</span>' : '');
+    el.style.color = pct > 80 ? 'var(--red)' : 'var(--slate)';
+}
+
+function editQ(id) {
+    editingIdx = queue.findIndex(q => q.id === id);
+    if (editingIdx < 0) return;
+    var item = queue[editingIdx];
+
+    // Load into capture form
+    document.getElementById('cap-body').value = item.data.body || '';
+    document.getElementById('cap-title').value = item.data.title || '';
+
+    // Load attachments
+    attachments.forEach(a => { if (a.blobUrl) URL.revokeObjectURL(a.blobUrl); });
+    attachments = [];
+
+    (item.data.photos || []).forEach(function(p) {
+        attachments.push({ type:'photo', base64:p.base64, mime:p.mime, name:p.name, thumb:p.thumb, full:'data:'+p.mime+';base64,'+p.base64 });
+    });
+    (item.data.audios || []).forEach(function(a) {
+        var bytes = Uint8Array.from(atob(a.base64), c => c.charCodeAt(0));
+        var blob = new Blob([bytes], { type:'audio/webm' });
+        var url = URL.createObjectURL(blob);
+        attachments.push({ type:'audio', base64:a.base64, blobUrl:url });
+    });
+
+    renderAttachments();
+    checkSubmit();
+
+    // Show edit bar, change button text
+    document.getElementById('edit-bar').classList.remove('hidden');
+    document.getElementById('cap-submit').textContent = 'update queued item';
+
+    showView('capture');
+}
+
+function cancelEdit() {
+    editingIdx = -1;
+    document.getElementById('edit-bar').classList.add('hidden');
+    document.getElementById('cap-submit').textContent = 'capture';
+    resetForm();
+}
+
+async function finishEdit() {
+    var body = document.getElementById('cap-body').value.trim();
+    var title = document.getElementById('cap-title').value.trim();
+
+    queue[editingIdx].data = {
+        body: body || null,
+        title: title || null,
+        photos: attachments.filter(a => a.type==='photo').map(a => ({ base64:a.base64, mime:a.mime, name:a.name, thumb:a.thumb })),
+        audios: attachments.filter(a => a.type==='audio').map(a => ({ base64:a.base64, mime:a.mime||'audio/webm', ext:a.ext||'.webm' })),
+    };
+    try {
+        await idbPut(queue[editingIdx]);
+    } catch(e) {
+        showErr('Storage full — cannot save changes');
+        return;
+    }
+
+    editingIdx = -1;
+    document.getElementById('edit-bar').classList.add('hidden');
+    document.getElementById('cap-submit').textContent = 'capture';
+    resetForm();
+    showView('queue');
+}
+
+async function deleteEditing() {
+    if (editingIdx < 0) return;
+    var id = queue[editingIdx].id;
+    editingIdx = -1;
+    document.getElementById('edit-bar').classList.add('hidden');
+    document.getElementById('cap-submit').textContent = 'capture';
+    resetForm();
+    await removeQ(id);
+    showView('queue');
+}
+
+function updateBadge() {
+    var el = document.getElementById('queue-count');
+    if (queue.length > 0) { el.textContent = queue.length + ' queued'; el.classList.remove('hidden'); }
+    else { el.classList.add('hidden'); }
+}
+
+function renderQueue() {
+    var list = document.getElementById('q-list');
+    document.getElementById('q-empty').style.display = queue.length ? 'none' : 'block';
+    document.getElementById('q-actions').classList.toggle('hidden', queue.length === 0);
+    updateStorage();
+
+    list.innerHTML = queue.map(function(item) {
+        var d = item.data;
+        var html = '<div class="q-item">';
+        html += '<div class="q-type">capture</div>';
+        if (d.body) html += '<div class="q-text">' + esc(d.body.substring(0,120)) + '</div>';
+        if (d.photos && d.photos.length) {
+            html += '<div class="q-photos">' + d.photos.map(function(p) {
+                return '<img src="' + p.thumb + '">';
+            }).join('') + '</div>';
+        }
+        if (d.audios && d.audios.length) html += '<div class="q-text" style="color:var(--slate);">🎙 ' + d.audios.length + ' voice</div>';
+        html += '<div class="q-time">' + new Date(item.timestamp).toLocaleString() + '</div>';
+        html += '<div class="q-actions">'
+            + '<button class="btn" onclick="editQ('+item.id+')">edit</button>'
+            + '<button class="btn" onclick="syncOne('+item.id+')">sync</button>'
+            + '<button class="btn btn-danger" onclick="removeQ('+item.id+')">remove</button>'
+            + '</div>';
+        html += '</div>';
+        return html;
+    }).join('');
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function buildFormForItem(d) {
+    var f = new FormData();
+    if (d.body) f.append('body', d.body);
+    if (d.title) f.append('title', d.title);
+    for (var p of (d.photos||[])) {
+        var bytes = Uint8Array.from(atob(p.base64), c=>c.charCodeAt(0));
+        f.append('file', new Blob([bytes],{type:p.mime}), p.name || 'photo.jpg');
+    }
+    for (var a of (d.audios||[])) {
+        var bytes = Uint8Array.from(atob(a.base64), c=>c.charCodeAt(0));
+        f.append('file', new Blob([bytes],{type:a.mime||'audio/webm'}), 'recording' + (a.ext||'.webm'));
+    }
+    return f;
+}
+
+async function syncOne(id) {
+    var item = queue.find(q => q.id === id);
+    if (!item) return;
+    try {
+        await fetchTimeout('/api/capture', buildFormForItem(item.data));
+        removeQ(item.id);
+        showErr('');
+    } catch(e) {
+        showErr('sync failed: ' + e.message);
+    }
+}
+
+async function syncQueue() {
+    var synced=0, failed=0;
+    var items = [...queue];
+
+    for (var item of items) {
+        try {
+            await fetchTimeout('/api/capture', buildFormForItem(item.data));
+            removeQ(item.id);
+            synced++;
+        } catch(e) { failed++; }
+    }
+
+    if (failed) showErr('synced ' + synced + ', failed ' + failed);
+    else { showErr(''); renderQueue(); }
+}
+
+// ── Init ──
+(async function() {
+    try {
+        // Migrate from localStorage if any
+        var old = localStorage.getItem('noto-q');
+        if (old) {
+            var oldItems = JSON.parse(old);
+            for (var item of oldItems) { await idbPut(item); }
+            localStorage.removeItem('noto-q');
+        }
+
+        // Load queue from IndexedDB
+        queue = await idbGetAll();
+    } catch(e) {
+        showErr('Failed to load queue: ' + e.message);
+    }
+    updateBadge();
+    updateStorage();
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw-capture.js').catch(function(){});
+
+fetch('/api/version').then(r=>r.json()).then(d=>{
+    document.getElementById('ver').textContent = d.hash;
+}).catch(function(){
+    document.getElementById('ver').textContent = 'offline';
+});
+</script>
+</body>
+</html>

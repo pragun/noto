@@ -1,0 +1,332 @@
+@page "/capture"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="cap-layout">
+
+    <!-- Mode tabs -->
+    <div class="cap-tabs">
+        <button class="cap-tab @(mode == "text" ? "active" : "")" @onclick='() => mode = "text"'>
+            text
+        </button>
+        <button class="cap-tab @(mode == "voice" ? "active" : "")" @onclick='() => mode = "voice"'>
+            voice
+        </button>
+        <button class="cap-tab @(mode == "photo" ? "active" : "")" @onclick='() => mode = "photo"'>
+            photo
+        </button>
+    </div>
+
+    @if (saved)
+    {
+        <div class="cap-saved">
+            <div class="cap-saved-icon">✓</div>
+            <div class="cap-saved-text">captured</div>
+            <div class="cap-saved-id">@savedId?.ToString()[..8]</div>
+            <div class="cap-saved-actions">
+                <button class="btn-zen" @onclick="Reset">another</button>
+                <button class="btn-zen" @onclick="GoToStream">stream</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- TEXT MODE -->
+        @if (mode == "text")
+        {
+            <div class="cap-body">
+                <textarea @bind="textBody" @bind:event="oninput" placeholder="what's on your mind..."
+                          class="cap-textarea" rows="6"></textarea>
+                <input type="text" @bind="textTitle" placeholder="title (optional)" class="cap-title-input" />
+                <button class="cap-submit" disabled="@string.IsNullOrWhiteSpace(textBody)" @onclick="SaveText">
+                    capture
+                </button>
+            </div>
+        }
+
+        <!-- VOICE MODE -->
+        @if (mode == "voice")
+        {
+            <div class="cap-body">
+                @if (recording)
+                {
+                    <div class="cap-recording">
+                        <div class="cap-recording-dot"></div>
+                        <div class="cap-recording-text">recording...</div>
+                        <div class="cap-recording-time">@recordingTime</div>
+                    </div>
+                    <button class="cap-submit" style="background:#b04040;" @onclick="StopRecording">
+                        stop
+                    </button>
+                }
+                else if (audioBase64 != null)
+                {
+                    <div class="cap-voice-preview">
+                        <div style="font-size:11px; color:var(--slate); margin-bottom:8px;">recording ready</div>
+                        <audio controls src="@($"data:audio/webm;base64,{audioBase64}")"
+                               style="width:100%; margin-bottom:12px;"></audio>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-zen" @onclick="DiscardRecording">discard</button>
+                            <button class="cap-submit" style="flex:1;" @onclick="SaveVoice">
+                                @(saving ? "saving..." : "capture voice note")
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="cap-voice-start">
+                        <button class="cap-record-btn" @onclick="StartRecording">
+                            <div class="cap-record-circle"></div>
+                        </button>
+                        <div style="font-size:11px; color:var(--slate); margin-top:12px;">tap to record</div>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- PHOTO MODE -->
+        @if (mode == "photo")
+        {
+            <div class="cap-body">
+                @if (photoPreviewUrl != null)
+                {
+                    <div class="cap-photo-preview">
+                        <img src="@photoPreviewUrl" style="max-width:100%; max-height:40vh; border:1px solid var(--chalk);" />
+                        <input type="text" @bind="photoCaption" placeholder="caption (optional)" class="cap-title-input" style="margin-top:10px;" />
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                            <button class="btn-zen" @onclick="DiscardPhoto">discard</button>
+                            <button class="cap-submit" style="flex:1;" @onclick="SavePhoto">
+                                @(saving ? "saving..." : "capture photo")
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="cap-photo-pick">
+                        <label class="cap-photo-btn">
+                            <InputFile OnChange="OnPhotoSelected" accept="image/*" style="display:none;" />
+                            <div class="cap-photo-icon">⊡</div>
+                            <div style="font-size:11px; color:var(--slate); margin-top:8px;">tap to take or choose photo</div>
+                        </label>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @if (error != null)
+    {
+        <div style="padding:12px 20px; font-size:11px; color:#b04040;">@error</div>
+    }
+</div>
+
+@code {
+    private string mode = "text";
+    private bool saved;
+    private Guid? savedId;
+    private bool saving;
+    private string? error;
+
+    // Text
+    private string textBody = "";
+    private string textTitle = "";
+
+    // Voice
+    private bool recording;
+    private string? audioBase64;
+    private string recordingTime = "0:00";
+    private System.Threading.Timer? recordingTimer;
+    private int recordingSeconds;
+    private DotNetObjectReference<Capture>? selfRef;
+
+    // Photo
+    private IBrowserFile? photoFile;
+    private string? photoPreviewUrl;
+    private string photoCaption = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("notoCapture.init", selfRef);
+        }
+    }
+
+    private void GoToStream() => Nav.NavigateTo("/");
+
+    private void Reset()
+    {
+        saved = false;
+        savedId = null;
+        error = null;
+        saving = false;
+        textBody = "";
+        textTitle = "";
+        audioBase64 = null;
+        photoFile = null;
+        photoPreviewUrl = null;
+        photoCaption = "";
+    }
+
+    // TEXT
+    private async Task SaveText()
+    {
+        if (string.IsNullOrWhiteSpace(textBody)) return;
+        saving = true;
+        var title = string.IsNullOrWhiteSpace(textTitle) ? null : textTitle.Trim();
+        var entity = await Svc.Create(EntityTypes.Capture, title, textBody.Trim());
+        savedId = entity.Id;
+        saved = true;
+        saving = false;
+    }
+
+    // VOICE
+    private async Task StartRecording()
+    {
+        error = null;
+        audioBase64 = null;
+        recordingSeconds = 0;
+        recordingTime = "0:00";
+
+        var success = await JS.InvokeAsync<bool>("notoCapture.startRecording");
+        if (!success)
+        {
+            error = "could not access microphone";
+            return;
+        }
+
+        recording = true;
+        recordingTimer = new System.Threading.Timer((_) =>
+        {
+            recordingSeconds++;
+            recordingTime = $"{recordingSeconds / 60}:{recordingSeconds % 60:D2}";
+            InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+    }
+
+    private async Task StopRecording()
+    {
+        recordingTimer?.Dispose();
+        recordingTimer = null;
+        await JS.InvokeVoidAsync("notoCapture.stopRecording");
+        recording = false;
+    }
+
+    [JSInvokable]
+    public void OnRecordingComplete(string base64)
+    {
+        audioBase64 = base64;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void DiscardRecording()
+    {
+        audioBase64 = null;
+        recordingSeconds = 0;
+        recordingTime = "0:00";
+    }
+
+    private async Task SaveVoice()
+    {
+        if (audioBase64 == null) return;
+        saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var bytes = Convert.FromBase64String(audioBase64);
+            using var content = new MultipartFormDataContent();
+            content.Add(new ByteArrayContent(bytes), "file", "recording.webm");
+
+            var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            var response = await http.PostAsync("/api/capture/audio", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                savedId = json.GetProperty("id").GetGuid();
+                saved = true;
+            }
+            else
+            {
+                error = "failed to save audio";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        saving = false;
+    }
+
+    // PHOTO
+    private async Task OnPhotoSelected(InputFileChangeEventArgs e)
+    {
+        photoFile = e.File;
+        if (photoFile == null) return;
+
+        // Create preview URL
+        var buffer = new byte[photoFile.Size];
+        using var stream = photoFile.OpenReadStream(maxAllowedSize: 50_000_000);
+        await stream.ReadAsync(buffer);
+        photoPreviewUrl = $"data:{photoFile.ContentType};base64,{Convert.ToBase64String(buffer)}";
+    }
+
+    private void DiscardPhoto()
+    {
+        photoFile = null;
+        photoPreviewUrl = null;
+        photoCaption = "";
+    }
+
+    private async Task SavePhoto()
+    {
+        if (photoFile == null) return;
+        saving = true;
+        StateHasChanged();
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            using var fileStream = photoFile.OpenReadStream(maxAllowedSize: 50_000_000);
+            using var ms = new MemoryStream();
+            await fileStream.CopyToAsync(ms);
+            content.Add(new ByteArrayContent(ms.ToArray()), "file", photoFile.Name);
+            if (!string.IsNullOrWhiteSpace(photoCaption))
+                content.Add(new StringContent(photoCaption.Trim()), "caption");
+
+            var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+            var response = await http.PostAsync("/api/capture/photo", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                savedId = json.GetProperty("id").GetGuid();
+                saved = true;
+            }
+            else
+            {
+                error = "failed to save photo";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        saving = false;
+    }
+
+    public void Dispose()
+    {
+        recordingTimer?.Dispose();
+        selfRef?.Dispose();
+    }
+}

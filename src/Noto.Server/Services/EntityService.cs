@@ -14,6 +14,23 @@ public class EntityService
         _db = db;
     }
 
+    public async Task<Attachment> AddAttachment(Guid entityId, string kind, string filename, string storagePath, string? mimeType)
+    {
+        var attachment = new Attachment
+        {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Kind = kind,
+            Filename = filename,
+            StoragePath = storagePath,
+            MimeType = mimeType,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _db.Attachments.Add(attachment);
+        await _db.SaveChangesAsync();
+        return attachment;
+    }
+
     public async Task<Entity> Create(string type, string? title, string? body, JsonDocument? meta = null)
     {
         var entity = new Entity
@@ -42,7 +59,7 @@ public class EntityService
 
     public async Task<List<Entity>> GetStream(int page = 0, int pageSize = 20, string? type = null)
     {
-        var query = _db.Entities.AsQueryable();
+        var query = _db.Entities.Where(e => e.DeletedAt == null);
 
         if (type != null)
             query = query.Where(e => e.Type == type);
@@ -58,7 +75,7 @@ public class EntityService
     public async Task<List<Entity>> GetByType(string type)
     {
         return await _db.Entities
-            .Where(e => e.Type == type)
+            .Where(e => e.Type == type && e.DeletedAt == null)
             .OrderByDescending(e => e.CreatedAt)
             .ToListAsync();
     }
@@ -82,14 +99,49 @@ public class EntityService
         var entity = await _db.Entities.FindAsync(id);
         if (entity == null) return false;
 
-        _db.Entities.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return true;
     }
 
+    public async Task<bool> Restore(Guid id)
+    {
+        var entity = await _db.Entities.FindAsync(id);
+        if (entity == null) return false;
+
+        entity.DeletedAt = null;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<Entity>> GetTrash()
+    {
+        return await _db.Entities
+            .Where(e => e.DeletedAt != null)
+            .OrderByDescending(e => e.DeletedAt)
+            .ToListAsync();
+    }
+
+    public async Task<int> PermanentDelete(Guid id)
+    {
+        var entity = await _db.Entities.FindAsync(id);
+        if (entity == null) return 0;
+        _db.Entities.Remove(entity);
+        await _db.SaveChangesAsync();
+        return 1;
+    }
+
+    public async Task<int> EmptyTrash()
+    {
+        var trashed = await _db.Entities.Where(e => e.DeletedAt != null).ToListAsync();
+        _db.Entities.RemoveRange(trashed);
+        await _db.SaveChangesAsync();
+        return trashed.Count;
+    }
+
     public async Task<int> Count(string? type = null)
     {
-        var query = _db.Entities.AsQueryable();
+        var query = _db.Entities.Where(e => e.DeletedAt == null);
         if (type != null) query = query.Where(e => e.Type == type);
         return await query.CountAsync();
     }
@@ -228,6 +280,7 @@ public class EntityService
     public async Task<List<Entity>> SearchText(string query, int limit = 20)
     {
         return await _db.Entities
+            .Where(e => e.DeletedAt == null)
             .Where(e => EF.Functions.ToTsVector("english",
                 (e.Title ?? "") + " " + (e.Body ?? ""))
                 .Matches(EF.Functions.PlainToTsQuery("english", query)))
