@@ -1,6 +1,7 @@
 @page "/"
 @using Noto.Server.Services
 @using Noto.Shared.Models
+@using Noto.Server.Components.Shared
 @inject EntityService Svc
 @inject IJSRuntime JS
 
@@ -9,6 +10,9 @@
 
 <!-- Quick capture -->
 <div class="quick-capture">
+    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+        <TemplatePicker Templates="templates" OnApply="ApplyTemplate" />
+    </div>
     <textarea @bind="newBody" @bind:event="oninput" placeholder="write something..." rows="2"></textarea>
     @if (!string.IsNullOrWhiteSpace(newBody))
     {
@@ -94,6 +98,7 @@ else
 
 @code {
     private List<Entity> entities = [];
+    private List<Entity> templates = [];
     private int page = 0;
     private int totalCount = 0;
     private string newBody = "";
@@ -127,6 +132,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         await LoadEntities();
+        templates = await Svc.GetTemplates();
     }
 
     private async Task LoadEntities()
@@ -139,6 +145,11 @@ else
     {
         page++;
         await LoadEntities();
+    }
+
+    private void ApplyTemplate(string body)
+    {
+        newBody = string.IsNullOrWhiteSpace(newBody) ? body : newBody + "\n\n" + body;
     }
 
     private async Task CreateCapture()

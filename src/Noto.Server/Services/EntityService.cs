@@ -276,6 +276,26 @@ public class EntityService
         return await Create(EntityTypes.Stash, name, body, meta);
     }
 
+    // Templates (stored as stash with meta.kind = "template")
+    public async Task<List<Entity>> GetTemplates()
+    {
+        var all = await _db.Entities
+            .Where(e => e.Type == EntityTypes.Stash && e.DeletedAt == null)
+            .ToListAsync();
+
+        return all.Where(e =>
+        {
+            if (e.Meta == null) return false;
+            return e.Meta.RootElement.TryGetProperty("kind", out var k) && k.GetString() == "template";
+        }).OrderBy(e => e.Title).ToList();
+    }
+
+    public async Task<Entity> CreateTemplate(string name, string body)
+    {
+        var meta = System.Text.Json.JsonDocument.Parse("{\"kind\":\"template\"}");
+        return await Create(EntityTypes.Stash, name, body, meta);
+    }
+
     // Search (basic full-text for now, Phase 4 adds semantic)
     public async Task<List<Entity>> SearchText(string query, int limit = 20)
     {

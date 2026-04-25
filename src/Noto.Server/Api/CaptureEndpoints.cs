@@ -74,6 +74,13 @@ public static class CaptureEndpoints
             return Results.Ok(new { id = entity.Id });
         }).DisableAntiforgery();
 
+        // Templates
+        api.MapGet("/templates", async (EntityService svc) =>
+        {
+            var templates = await svc.GetTemplates();
+            return Results.Ok(templates.Select(t => new { id = t.Id, title = t.Title, body = t.Body }));
+        });
+
         // Keep the old endpoints for backwards compat
         api.MapPost("/capture/text", async (HttpRequest request, EntityService svc) =>
         {

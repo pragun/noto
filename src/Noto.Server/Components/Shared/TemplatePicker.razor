@@ -1,0 +1,30 @@
+@using Noto.Shared.Models
+
+<div style="display:inline-flex; align-items:center; gap:4px;">
+    <select @bind="selectedId" @bind:after="OnSelected"
+            style="background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:10px; color:var(--charcoal); padding:3px 6px; outline:none;">
+        <option value="">template...</option>
+        @foreach (var t in Templates)
+        {
+            <option value="@t.Id">@t.Title</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public List<Entity> Templates { get; set; } = [];
+    [Parameter] public EventCallback<string> OnApply { get; set; }
+
+    private string selectedId = "";
+
+    private async Task OnSelected()
+    {
+        if (string.IsNullOrEmpty(selectedId)) return;
+        var template = Templates.FirstOrDefault(t => t.Id.ToString() == selectedId);
+        if (template?.Body != null)
+        {
+            await OnApply.InvokeAsync(template.Body);
+        }
+        selectedId = "";
+    }
+}

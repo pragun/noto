@@ -1,0 +1,103 @@
+@page "/templates"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+
+<div class="page-date">tools</div>
+<div class="page-title">templates</div>
+
+@if (editing != null)
+{
+    <div class="quick-capture" style="margin-bottom:16px;">
+        <input type="text" @bind="editName" placeholder="template name..."
+               style="width:100%; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:14px; color:var(--charcoal); padding:6px 0; outline:none; margin-bottom:10px;" />
+        <textarea @bind="editBody" rows="10"
+                  style="width:100%; background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:13px; color:var(--charcoal); padding:12px; outline:none; line-height:1.8; resize:vertical;"></textarea>
+        <div style="display:flex; gap:8px; margin-top:10px; justify-content:flex-end;">
+            <button class="btn-zen" @onclick="CancelEdit">cancel</button>
+            @if (editing.Id != Guid.Empty)
+            {
+                <button class="btn-zen danger" @onclick="DeleteTemplate">delete</button>
+            }
+            <button class="btn-zen primary" @onclick="SaveTemplate">save</button>
+        </div>
+    </div>
+}
+else
+{
+    <button class="btn-zen primary" style="margin-bottom:16px;" @onclick="NewTemplate">+ new template</button>
+}
+
+<div class="note-stream-label">@templates.Count templates</div>
+
+@if (templates.Count == 0 && editing == null)
+{
+    <div class="empty-state">
+        <div class="icon">⊞</div>
+        <p>no templates yet.<br/>create one to use as a starting structure for notes.</p>
+    </div>
+}
+
+@foreach (var t in templates)
+{
+    <div class="note-card" style="cursor:pointer;" @onclick="() => EditTemplate(t)">
+        <div class="note-card-meta">
+            <span class="note-type-tag tag-stash">template</span>
+        </div>
+        <div class="note-title">@t.Title</div>
+        <div class="note-preview" style="-webkit-line-clamp:4; white-space:pre-wrap;">@t.Body</div>
+    </div>
+}
+
+@code {
+    private List<Entity> templates = [];
+    private Entity? editing;
+    private string editName = "";
+    private string editBody = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        templates = await Svc.GetTemplates();
+    }
+
+    private void NewTemplate()
+    {
+        editing = new Entity { Id = Guid.Empty };
+        editName = "";
+        editBody = "";
+    }
+
+    private void EditTemplate(Entity t)
+    {
+        editing = t;
+        editName = t.Title ?? "";
+        editBody = t.Body ?? "";
+    }
+
+    private void CancelEdit() => editing = null;
+
+    private async Task SaveTemplate()
+    {
+        if (string.IsNullOrWhiteSpace(editName)) return;
+
+        if (editing!.Id == Guid.Empty)
+        {
+            await Svc.CreateTemplate(editName.Trim(), editBody);
+        }
+        else
+        {
+            await Svc.Update(editing.Id, title: editName.Trim(), body: editBody);
+        }
+
+        editing = null;
+        templates = await Svc.GetTemplates();
+    }
+
+    private async Task DeleteTemplate()
+    {
+        if (editing == null || editing.Id == Guid.Empty) return;
+        await Svc.Delete(editing.Id);
+        editing = null;
+        templates = await Svc.GetTemplates();
+    }
+}
