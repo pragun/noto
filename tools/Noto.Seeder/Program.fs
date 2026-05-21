@@ -7,7 +7,10 @@ open Noto.Server.Data
 open Noto.Server.Services
 open Noto.Shared.Models
 
-let connStr = "Host=localhost;Port=5433;Database=noto;Username=noto;Password=noto"
+let connStr =
+    match Environment.GetEnvironmentVariable("ConnectionStrings__Noto") with
+    | s when not (String.IsNullOrWhiteSpace s) -> s
+    | _ -> "Host=localhost;Port=5433;Database=noto;Username=noto;Password=noto"
 
 let createService () =
     let optionsBuilder = DbContextOptionsBuilder<NotoDbContext>()

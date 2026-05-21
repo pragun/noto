@@ -1,10 +1,10 @@
 window.notoAudio = window.notoAudio || {};
 
 let wavesurfer = null;
-let dotnetRef = null;
+let audioDotnetRef = null;
 
 notoAudio.init = async function (ref, container, audioUrl) {
-    dotnetRef = ref;
+    audioDotnetRef = ref;
 
     // Dynamically load wavesurfer if not present
     if (!window.WaveSurfer) {
@@ -36,16 +36,16 @@ notoAudio.init = async function (ref, container, audioUrl) {
     });
 
     wavesurfer.on('timeupdate', function (time) {
-        dotnetRef.invokeMethodAsync('OnTimeUpdate', time);
+        audioDotnetRef.invokeMethodAsync('OnTimeUpdate', time);
     });
 
     wavesurfer.on('click', function (relativeX) {
         const time = relativeX * wavesurfer.getDuration();
-        dotnetRef.invokeMethodAsync('OnTimeUpdate', time);
+        audioDotnetRef.invokeMethodAsync('OnTimeUpdate', time);
     });
 
     wavesurfer.on('ready', function () {
-        dotnetRef.invokeMethodAsync('OnReady', wavesurfer.getDuration());
+        audioDotnetRef.invokeMethodAsync('OnReady', wavesurfer.getDuration());
     });
 
     if (audioUrl) {

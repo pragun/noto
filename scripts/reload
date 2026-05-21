@@ -1,0 +1,5 @@
+#!/bin/bash
+# Trigger an in-container app reload by touching the sentinel file.
+cd "$(dirname "$0")/.."
+touch .reload
+echo "noto reloading…"

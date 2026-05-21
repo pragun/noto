@@ -2,10 +2,10 @@ window.notoCapture = window.notoCapture || {};
 
 let mediaRecorder = null;
 let audioChunks = [];
-let dotnetRef = null;
+let captureDotnetRef = null;
 
 notoCapture.init = function(ref) {
-    dotnetRef = ref;
+    captureDotnetRef = ref;
 };
 
 // Voice recording
@@ -24,7 +24,7 @@ notoCapture.startRecording = async function() {
             const reader = new FileReader();
             reader.onloadend = () => {
                 const base64 = reader.result.split(',')[1];
-                dotnetRef.invokeMethodAsync('OnRecordingComplete', base64);
+                captureDotnetRef.invokeMethodAsync('OnRecordingComplete', base64);
             };
             reader.readAsDataURL(blob);
 

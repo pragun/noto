@@ -100,7 +100,10 @@ type NotoArgs =
             | Count -> "count entities"
 
 let connStr =
-    "Host=localhost;Port=5433;Database=noto;Username=noto;Password=noto"
+    // Allow override via env var (used by docker compose where postgres is at db:5432)
+    match Environment.GetEnvironmentVariable("ConnectionStrings__Noto") with
+    | s when not (String.IsNullOrWhiteSpace s) -> s
+    | _ -> "Host=localhost;Port=5433;Database=noto;Username=noto;Password=noto"
 
 let createDb () =
     let optionsBuilder = DbContextOptionsBuilder<NotoDbContext>()
