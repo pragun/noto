@@ -6,16 +6,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="stylesheet" href="@Assets["css/noto.css"]" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2e2e2e" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="nōto" />
     <ImportMap />
     <HeadOutlet />
 </head>
 
 <body>
     <Routes @rendermode="RenderMode.InteractiveServer" />
+    <script src="@Assets["js/shortcuts.js"]"></script>
+    <script src="@Assets["js/audio-annotator.js"]"></script>
+    <script src="@Assets["js/capture.js"]"></script>
+    <script src="@Assets["js/chordpro.js"]"></script>
     <script src="_framework/blazor.web.js"></script>
-    <script src="js/shortcuts.js"></script>
-    <script src="js/audio-annotator.js"></script>
-    <script src="js/capture.js"></script>
 </body>
 
 </html>

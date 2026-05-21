@@ -1,0 +1,13 @@
+{
+    auto_https off
+    admin off
+}
+
+:80 {
+    reverse_proxy app:5100 {
+        # Preserve original host header so Blazor sees noto.localhost
+        header_up Host {host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

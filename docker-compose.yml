@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: noto
       POSTGRES_DB: noto
     ports:
-      - "5433:5432"   # host port 5433 for dev (CLI, dotnet run); containers use db:5432
+      - "5433:5432"
     volumes:
       - ${NOTO_DATA:-~/noto-data}/postgres:/var/lib/postgresql/data
     healthcheck:
@@ -22,28 +22,55 @@ services:
     container_name: noto-ollama
     restart: unless-stopped
     ports:
-      - "11434:11434"   # host port for dev; containers use ollama:11434
+      - "11434:11434"
     volumes:
       - ${NOTO_DATA:-~/noto-data}/ollama:/root/.ollama
-    # Apple Silicon: runs on CPU in Docker, still fast for embedding models
-    # Pull models after first start: docker exec noto-ollama ollama pull mxbai-embed-large
 
   app:
-    build:
-      context: .
-      dockerfile: src/Noto.Server/Dockerfile
+    image: mcr.microsoft.com/dotnet/sdk:9.0
     container_name: noto-app
     restart: unless-stopped
+    working_dir: /workspace
+    command: /workspace/scripts/run.sh
+    ports:
+      - "5100:5100"   # HTTP
+      - "5101:5101"   # HTTPS
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "5000:8080"
     environment:
-      ConnectionStrings__Noto: "Host=db;Database=noto;Username=noto;Password=noto"
+      # Development env so unpublished static web assets are served correctly
+      ASPNETCORE_ENVIRONMENT: Development
+      # Container networking — override appsettings to talk to other services by name
+      ConnectionStrings__Noto: "Host=db;Port=5432;Database=noto;Username=noto;Password=noto"
       Storage__MediaRoot: /data/media
       Embeddings__Endpoint: "http://ollama:11434/v1/embeddings"
+      # API keys from .env (gitignored)
       OpenRouter__ApiKey: ${OPENROUTER_KEY:-}
       Whisper__ApiKey: ${OPENAI_KEY:-}
+      # HTTPS cert path inside container
+      Kestrel__Endpoints__Https__Certificate__Path: /certs/server.pfx
+      Kestrel__Endpoints__Https__Certificate__Password: noto
     volumes:
-      - ${NOTO_DATA:-~/noto-data}/media:/data/media
+      - .:/workspace:cached                                        # live source
+      - ${NOTO_DATA:-~/noto-data}/media:/data/media                # photos, audio
+      - ./certs:/certs:ro                                          # HTTPS cert
+      - noto-nuget:/root/.nuget/packages                           # NuGet cache (persistent)
+      - noto-bin:/workspace/src/Noto.Server/bin                    # build artifacts (fast)
+      - noto-obj:/workspace/src/Noto.Server/obj
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: noto-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - app
+
+volumes:
+  noto-nuget:
+  noto-bin:
+  noto-obj:
