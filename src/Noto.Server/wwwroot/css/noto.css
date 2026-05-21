@@ -1845,6 +1845,218 @@ body {
     .main-wrap { margin-left: 0; }
 }
 
+/* ── ChordPro / Chord Sheet ──────────────────────── */
+.chordpro-render {
+    background: #fcfaf4;
+    border: 1px solid var(--chalk);
+    padding: 28px 32px;
+    margin: 8px 0;
+    color: #2e2e2e;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+.cp-sheet { display: block; }
+
+.cp-header {
+    border-bottom: 1px solid var(--chalk);
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+}
+
+.cp-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: #2e2e2e;
+    letter-spacing: 0.01em;
+}
+
+.cp-subtitle {
+    font-size: 12px;
+    color: var(--slate);
+    margin-top: 2px;
+}
+
+.cp-meta {
+    font-size: 10px;
+    color: var(--slate);
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+}
+
+.cp-controls {
+    display: flex;
+    gap: 4px;
+    margin-top: 10px;
+    align-items: center;
+}
+
+.cp-controls button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 3px 10px;
+    border: 1px solid var(--chalk);
+    background: rgba(255,255,255,0.5);
+    color: var(--charcoal);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cp-controls button:hover {
+    border-color: var(--matcha);
+}
+
+/* Chord diagrams */
+.cp-diagrams {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--chalk);
+    margin-bottom: 16px;
+}
+
+.cp-diagram {
+    width: 80px;
+}
+
+.cp-diagram svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Body — chord-over-lyric */
+.cp-body {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #2e2e2e;
+    white-space: pre-wrap;
+}
+
+/* ChordSheetJS HtmlDivFormatter classes */
+.cp-body .paragraph { margin-bottom: 10px; }
+.cp-body .row { display: flex; flex-wrap: wrap; }
+.cp-body .column { display: inline-flex; flex-direction: column; align-items: flex-start; min-height: 2.4em; }
+.cp-body .chord {
+    font-weight: 500;
+    color: var(--matcha-dim);
+    min-height: 1.2em;
+    white-space: pre;
+}
+.cp-body .lyrics { white-space: pre; }
+.cp-body .verse-label,
+.cp-body .chorus-label,
+.cp-body .bridge-label,
+.cp-body .label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin: 8px 0 4px;
+    display: block;
+}
+.cp-body .comment {
+    font-style: italic;
+    color: var(--slate);
+    font-size: 11px;
+}
+
+/* Multi-column layouts */
+.cp-cols-2 { column-count: 2; column-gap: 24px; column-rule: 1px solid var(--chalk); }
+.cp-cols-3 { column-count: 3; column-gap: 18px; column-rule: 1px solid var(--chalk); }
+.cp-body .paragraph { break-inside: avoid; }
+
+/* ── Print ───────────────────────────────────────── */
+@media print {
+    /* Hide all chrome */
+    .sidebar, .top-row, .quick-capture, .stream-day-sep,
+    .note-card-meta button, .btn-zen, .toast-msg,
+    .nav-section-label, .sidebar-nav, .capture-btn,
+    .search-overlay, .search-backdrop,
+    .ws-seed-panel, .ws-topbar, .ws-prompt-bar, .ws-context-bar,
+    .weave-medallion-backdrop, .weave-controls,
+    nav, .note-themes, .detail-meta,
+    .note-stream-label, .note-card,
+    .render-toggle, .ep-wrap { display: none !important; }
+
+    body {
+        background: white !important;
+        color: black !important;
+        font-size: 11pt;
+        background-image: none !important;
+    }
+
+    .main-wrap { margin-left: 0 !important; }
+    .main-content { padding: 0 !important; max-width: 100% !important; }
+
+    .detail-header { margin-bottom: 18px; }
+    .detail-type { color: #888; font-size: 8pt; }
+    .detail-title { font-size: 16pt; color: black; font-weight: 500; }
+
+    /* Body content — preserve whitespace for chord sheets */
+    .detail-body { font-size: 11pt; line-height: 1.5; color: black; }
+
+    /* Code blocks (where chord sheets live) — use monospace, preserve EVERYTHING */
+    .detail-body pre {
+        background: white !important;
+        color: black !important;
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-size: 10pt;
+        line-height: 1.4;
+        padding: 0 !important;
+        margin: 8pt 0;
+        white-space: pre !important;
+        page-break-inside: avoid;
+        border: none !important;
+    }
+
+    .detail-body pre code {
+        background: white !important;
+        color: black !important;
+        white-space: pre !important;
+    }
+
+    .detail-body code {
+        background: rgba(0,0,0,0.05) !important;
+        color: black !important;
+        padding: 1pt 3pt;
+    }
+
+    .detail-body h1 { font-size: 14pt; color: black; margin: 12pt 0 6pt; page-break-after: avoid; }
+    .detail-body h2 { font-size: 12pt; color: black; margin: 10pt 0 4pt; page-break-after: avoid; }
+    .detail-body h3 { font-size: 11pt; color: black; margin: 8pt 0 3pt; page-break-after: avoid; }
+    .detail-body p { margin: 0 0 8pt; orphans: 3; widows: 3; }
+    .detail-body blockquote { border-left: 2pt solid #888; padding-left: 10pt; color: #444; }
+
+    .note-card { page-break-inside: avoid; border: 1pt solid #ccc; box-shadow: none !important; }
+
+    /* Songbook view — multiple captures, page break between each */
+    .songbook-item { page-break-after: always; padding: 0; }
+    .songbook-item:last-child { page-break-after: auto; }
+
+    @page {
+        size: letter;
+        margin: 0.5in;
+    }
+
+    /* Chord sheet print */
+    .cp-controls, .render-toggle, .entity-id-only,
+    .zen-divider, hr, input[type=text], select { display: none !important; }
+    .chordpro-render {
+        background: white !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .cp-title { font-size: 16pt; }
+    .cp-subtitle { font-size: 11pt; }
+    .cp-meta { font-size: 9pt; }
+    .cp-body { font-size: 10pt; line-height: 1.35; }
+    .cp-body .chord { color: #444 !important; font-weight: 600; }
+    .cp-diagram { width: 70px; }
+    .cp-diagrams { padding: 6pt 0; margin-bottom: 10pt; }
+}
+
 /* ── Scrollbar ───────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

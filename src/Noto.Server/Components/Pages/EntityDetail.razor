@@ -6,6 +6,7 @@
 @using Noto.Server.Components.Shared
 @inject EntityService Svc
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 @if (entity == null)
 {
@@ -15,16 +16,25 @@
 }
 else
 {
-    <div class="detail-header">
-        <div class="detail-type">@entity.Type</div>
-        @if (entity.Title != null)
-        {
-            <div class="detail-title">@entity.Title</div>
-        }
-        <div style="font-size:10px; color:var(--slate-2); margin-top:4px;">
-            @entity.Id &middot; @entity.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+    @if (renderMode != "chord-sheet")
+    {
+        <div class="detail-header">
+            <div class="detail-type">@entity.Type</div>
+            @if (entity.Title != null)
+            {
+                <div class="detail-title">@entity.Title</div>
+            }
+            <div style="font-size:10px; color:var(--slate-2); margin-top:4px;">
+                @entity.Id &middot; @entity.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            </div>
         </div>
-    </div>
+    }
+    else
+    {
+        <div style="font-size:9px; color:var(--slate); margin-bottom:8px; letter-spacing:0.08em;" class="entity-id-only">
+            @entity.Id.ToString()[..8] &middot; @entity.CreatedAt.ToLocalTime().ToString("MMM d")
+        </div>
+    }
 
     <div style="display:flex; gap:8px; margin-bottom:20px;">
         <button class="btn-zen" @onclick="GoBack">back</button>
@@ -48,9 +58,33 @@ else
     }
     else
     {
+        <div style="display:flex; gap:6px; align-items:center; margin-bottom:12px;" class="render-toggle">
+            <span style="font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--slate);">render:</span>
+            <select @bind="renderMode" @bind:after="OnRenderModeChanged"
+                    style="background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:10px; color:var(--charcoal); padding:3px 6px; outline:none;">
+                @if (renderMode != "chord-sheet")
+                {
+                    <option value="markdown">markdown</option>
+                }
+                <option value="chord-sheet">chord sheet</option>
+                <option value="plain">plain (raw)</option>
+            </select>
+        </div>
+
         @if (entity.Body != null)
         {
-            <div class="detail-body">@RenderMarkdown(entity.Body)</div>
+            @if (renderMode == "chord-sheet")
+            {
+                <div id="chordpro-target" class="chordpro-render"></div>
+            }
+            else if (renderMode == "plain")
+            {
+                <pre class="detail-body" style="white-space:pre-wrap; font-family:'JetBrains Mono', monospace;">@entity.Body</pre>
+            }
+            else
+            {
+                <div class="detail-body">@RenderMarkdown(entity.Body)</div>
+            }
         }
     }
 
@@ -153,11 +187,58 @@ else
     private HashSet<Guid> taggedThreadIds = [];
     private HashSet<Guid> allLinkedIds = [];
     private string linkReason = "";
+    private string renderMode = "markdown";
 
     protected override async Task OnParametersSetAsync()
     {
         entity = await Svc.GetById(Id);
         UpdateLinkedIds();
+        renderMode = GetMetaString(entity, "render") ?? "markdown";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (entity != null && renderMode == "chord-sheet" && entity.Body != null)
+        {
+            await JS.InvokeVoidAsync("notoChordPro.render", "#chordpro-target", entity.Body, null, entity.Title);
+        }
+    }
+
+    private static string? GetMetaString(Entity? e, string key)
+    {
+        if (e?.Meta == null) return null;
+        try
+        {
+            if (e.Meta.RootElement.TryGetProperty(key, out var v))
+                return v.GetString();
+        }
+        catch { }
+        return null;
+    }
+
+    private async Task OnRenderModeChanged()
+    {
+        if (entity == null) return;
+        var metaDict = new Dictionary<string, object>();
+        if (entity.Meta != null)
+        {
+            foreach (var prop in entity.Meta.RootElement.EnumerateObject())
+            {
+                metaDict[prop.Name] = prop.Value.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.String => (object)prop.Value.GetString()!,
+                    System.Text.Json.JsonValueKind.Number => prop.Value.GetDouble(),
+                    System.Text.Json.JsonValueKind.True => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    _ => prop.Value.ToString()!,
+                };
+            }
+        }
+        metaDict["render"] = renderMode;
+        var newMeta = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(metaDict));
+        await Svc.Update(entity.Id, meta: newMeta);
+        entity = await Svc.GetById(Id);
+        StateHasChanged();
     }
 
     private void UpdateLinkedIds()

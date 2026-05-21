@@ -1,0 +1,89 @@
+@page "/songs"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EntityService Svc
+@inject NavigationManager Nav
+
+<div class="page-date">music</div>
+<div class="page-title">songs</div>
+
+<div style="display:flex; gap:8px; margin-bottom:20px;">
+    <button class="btn-zen primary" @onclick="NewSong">+ new song</button>
+</div>
+
+<div class="note-stream-label">@songs.Count songs</div>
+
+@if (songs.Count == 0)
+{
+    <div class="empty-state">
+        <div class="icon">♪</div>
+        <p>no songs yet.<br/>create one to start building a chord sheet.</p>
+    </div>
+}
+
+@foreach (var s in songs)
+{
+    <div class="note-card" style="cursor:pointer; border-left-color:var(--matcha-dim);"
+         @onclick="() => Open(s.Id)">
+        <div class="note-card-meta">
+            <span class="note-type-tag tag-capture">song</span>
+            <span class="note-time">@s.UpdatedAt.ToLocalTime().ToString("MMM d")</span>
+        </div>
+        <div class="note-title">@(GetTitleFromBody(s.Body) ?? s.Title ?? "(untitled)")</div>
+        <div class="note-preview" style="font-size:10px; color:var(--slate);">@GetMetaSummary(s.Body)</div>
+    </div>
+}
+
+@code {
+    private List<Entity> songs = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        // All captures with meta.render = "chord-sheet"
+        var all = await Svc.GetByType(EntityTypes.Capture);
+        songs = all.Where(e =>
+        {
+            if (e.Meta == null) return false;
+            try
+            {
+                if (e.Meta.RootElement.TryGetProperty("render", out var r))
+                    return r.GetString() == "chord-sheet";
+            }
+            catch { }
+            return false;
+        }).OrderByDescending(e => e.UpdatedAt).ToList();
+    }
+
+    private async Task NewSong()
+    {
+        var template = "{title: New Song}\n{key: G}\n{capo: 0}\n\n{soc}\n[G]Verse [C]lyrics [D]here\n{eoc}\n";
+        var meta = System.Text.Json.JsonDocument.Parse("{\"render\":\"chord-sheet\"}");
+        var entity = await Svc.Create(EntityTypes.Capture, "New Song", template, meta);
+        Nav.NavigateTo($"/entity/{entity.Id}");
+    }
+
+    private void Open(Guid id) => Nav.NavigateTo($"/entity/{id}");
+
+    private string? GetTitleFromBody(string? body)
+    {
+        if (body == null) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:title|t):\s*(.+?)\}");
+        return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
+    private string GetMetaSummary(string? body)
+    {
+        if (body == null) return "";
+        var parts = new List<string>();
+        var key = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:key|k):\s*(.+?)\}");
+        if (key.Success) parts.Add("key " + key.Groups[1].Value.Trim());
+        var capo = System.Text.RegularExpressions.Regex.Match(body, @"\{capo:\s*(.+?)\}");
+        if (capo.Success && capo.Groups[1].Value.Trim() != "0") parts.Add("capo " + capo.Groups[1].Value.Trim());
+        return string.Join(" · ", parts);
+    }
+}
