@@ -1,11 +1,14 @@
-// Service worker — cache fonts only, always fetch m.html fresh
-const CACHE_NAME = 'noto-static-v1';
+// Service worker — cache local fonts, always fetch m.html fresh.
+// Bumped cache name to force refresh after moving off external CDNs.
+const CACHE_NAME = 'noto-static-v2';
 
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache =>
             cache.addAll([
-                'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap'
+                '/lib/fonts/jetbrains-mono.css',
+                '/lib/fonts/jetbrainsmono-normal.woff2',
+                '/lib/fonts/jetbrainsmono-italic.woff2'
             ])
         )
     );

@@ -10,7 +10,7 @@ notoAudio.init = async function (ref, container, audioUrl) {
     if (!window.WaveSurfer) {
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js';
+            script.src = '/lib/js/wavesurfer.min.js';
             script.onload = resolve;
             script.onerror = reject;
             document.head.appendChild(script);
