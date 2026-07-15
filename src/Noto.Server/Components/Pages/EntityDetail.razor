@@ -7,6 +7,7 @@
 @inject EntityService Svc
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @if (entity == null)
 {
@@ -178,6 +179,7 @@ else
 
 @code {
     [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery(Name = "edit")] public bool EditOnLoad { get; set; }
 
     private Entity? entity;
     private bool editing = false;
@@ -194,11 +196,19 @@ else
         entity = await Svc.GetById(Id);
         UpdateLinkedIds();
         renderMode = GetMetaString(entity, "render") ?? "markdown";
+        if (EditOnLoad && !editing && entity != null)
+        {
+            editTitle = entity.Title ?? "";
+            editBody = entity.Body ?? "";
+            editing = true;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (entity != null && renderMode == "chord-sheet" && entity.Body != null)
+        var isChordSheet = entity != null && renderMode == "chord-sheet";
+        await JS.InvokeVoidAsync("noto.setBodyClass", "entity-chord-sheet", isChordSheet);
+        if (isChordSheet && entity!.Body != null)
         {
             await JS.InvokeVoidAsync("notoChordPro.render", "#chordpro-target", entity.Body, null, entity.Title);
         }
@@ -302,7 +312,15 @@ else
     {
         if (entity == null) return;
         var title = string.IsNullOrWhiteSpace(editTitle) ? null : editTitle.Trim();
-        await Svc.Update(entity.Id, title: title, body: editBody.Trim());
+        var body = editBody.Trim();
+        // For chord sheets, the canonical title is the {title:} directive in the source.
+        // Sync the entity title so the stream + songs list stay in sync without user effort.
+        if (renderMode == "chord-sheet")
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:title|t):\s*(.+?)\}");
+            if (m.Success) title = m.Groups[1].Value.Trim();
+        }
+        await Svc.Update(entity.Id, title: title, body: body);
         entity = await Svc.GetById(Id);
         editing = false;
     }
@@ -315,11 +333,27 @@ else
             return;
         }
         await Svc.Delete(Id);
-        Nav.NavigateTo("/");
+        await JS.InvokeVoidAsync("noto.backOr", FallbackUrl());
     }
 
+    private async Task GoBack() => await JS.InvokeVoidAsync("noto.backOr", FallbackUrl());
+
+    private string FallbackUrl() => entity?.Type switch
+    {
+        "thread" => "/threads",
+        "stash" => "/stash",
+        "chat" => "/workspace",
+        _ when GetMetaString(entity, "render") == "chord-sheet" => "/songs",
+        _ => "/"
+    };
+
     private void GoTo(Guid id) => Nav.NavigateTo($"/entity/{id}");
-    private void GoBack() => Nav.NavigateTo("/");
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("noto.setBodyClass", "entity-chord-sheet", false); }
+        catch { /* circuit may already be torn down */ }
+    }
 
     private static readonly MarkdownPipeline _mdPipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()

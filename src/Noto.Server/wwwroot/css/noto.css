@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap');
+@import url('/lib/fonts/jetbrains-mono.css');
 
 :root {
     --charcoal:   #2e2e2e;
@@ -1845,6 +1845,52 @@ body {
     .main-wrap { margin-left: 0; }
 }
 
+/* ── Songs page layout (list + artist aside) ─────── */
+.songs-layout {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+}
+.songs-main { flex: 1 1 auto; min-width: 0; }
+.songs-aside {
+    flex: 0 0 200px;
+    border-left: 1px solid var(--chalk);
+    padding-left: 20px;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+}
+.aside-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin-bottom: 10px;
+}
+.aside-list { display: flex; flex-direction: column; gap: 2px; }
+.aside-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 8px;
+    background: transparent;
+    border: none;
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 0;
+    width: 100%;
+}
+.aside-item:hover { background: var(--chalk-soft, #ede5d3); }
+.aside-item.active { background: var(--matcha-dim); color: white; }
+.aside-item.active .aside-count { color: rgba(255,255,255,0.7); }
+.aside-item .muted { color: var(--slate); font-style: italic; }
+.aside-count { font-size: 10px; color: var(--slate); font-variant-numeric: tabular-nums; }
+
 /* ── ChordPro / Chord Sheet ──────────────────────── */
 .chordpro-render {
     background: #fcfaf4;
@@ -1853,9 +1899,21 @@ body {
     margin: 8px 0;
     color: #2e2e2e;
     font-family: 'JetBrains Mono', 'Courier New', monospace;
+    /* Shrink-wrap to widest line, but at least fill the parent */
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    box-sizing: border-box;
 }
 
 .cp-sheet { display: block; }
+
+/* When a chord sheet is showing, let main-content grow past its 720px clamp.
+   Toggled via body.entity-chord-sheet from EntityDetail.razor JS interop. */
+body.entity-chord-sheet .main-content {
+    max-width: none;
+    padding-right: 60px;
+}
 
 .cp-header {
     border-bottom: 1px solid var(--chalk);
@@ -1927,7 +1985,7 @@ body {
 /* Body — chord-over-lyric */
 .cp-body {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: var(--cp-font-pt, 12px);
     line-height: 1.4;
     color: #2e2e2e;
     white-space: pre-wrap;
@@ -1936,12 +1994,23 @@ body {
 /* ChordSheetJS HtmlDivFormatter classes */
 .cp-body .paragraph { margin-bottom: 10px; }
 .cp-body .row { display: flex; flex-wrap: wrap; }
-.cp-body .column { display: inline-flex; flex-direction: column; align-items: flex-start; min-height: 2.4em; }
+/* Add breathing room between consecutive rows so a chord visually attaches
+   to ITS lyric (below it) rather than the previous line. First row in a
+   paragraph doesn't get extra space — paragraph margin handles that. */
+.cp-body .row + .row { margin-top: 0.5em; }
+.cp-body .column { display: inline-flex; flex-direction: column; align-items: flex-start; }
 .cp-body .chord {
     font-weight: 500;
     color: var(--matcha-dim);
-    min-height: 1.2em;
+    line-height: 1.4;
+    min-height: 1.4em;
     white-space: pre;
+}
+/* Force empty chord cells to occupy the same vertical space as filled ones
+   so adjacent lyric baselines don't zig-zag on lines with mid-word chord changes. */
+.cp-body .chord:empty::before {
+    content: '\00a0';
+    display: inline-block;
 }
 .cp-body .lyrics { white-space: pre; }
 .cp-body .verse-label,
@@ -1964,7 +2033,27 @@ body {
 /* Multi-column layouts */
 .cp-cols-2 { column-count: 2; column-gap: 24px; column-rule: 1px solid var(--chalk); }
 .cp-cols-3 { column-count: 3; column-gap: 18px; column-rule: 1px solid var(--chalk); }
-.cp-body .paragraph { break-inside: avoid; }
+/* Keep individual chord-over-lyric lines atomic (so the chord and its lyric
+   never split across a page break), but let a long verse/chorus span pages
+   when needed — avoids huge empty space at the bottom of a print page. */
+.cp-body .paragraph .row { break-inside: avoid; }
+.cp-body .paragraph { orphans: 2; widows: 2; }
+
+/* Inline {c: ...} comments — by ChordPro convention these should be their own
+   line, but inline use is common too. Align to the lyric baseline (not the
+   chord row) and style as a small italic annotation. */
+.cp-body .row > .comment {
+    align-self: flex-end;
+    font-style: italic;
+    font-size: 10px;
+    color: var(--slate);
+    padding: 1px 7px;
+    margin: 0 3px;
+    background: rgba(218, 212, 200, 0.45);
+    border-radius: 9px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
 
 /* ── Print ───────────────────────────────────────── */
 @media print {
@@ -2051,8 +2140,11 @@ body {
     .cp-title { font-size: 16pt; }
     .cp-subtitle { font-size: 11pt; }
     .cp-meta { font-size: 9pt; }
-    .cp-body { font-size: 10pt; line-height: 1.35; }
-    .cp-body .chord { color: #444 !important; font-weight: 600; }
+    .cp-body { font-size: var(--cp-print-pt, 10pt); line-height: 1.35; }
+    /* More room between rows in print — readers need the chord visually
+       glued to its lyric, not to the line above. */
+    .cp-body .row + .row { margin-top: 0.7em; }
+    .cp-body .chord { color: #444 !important; font-weight: 600; line-height: 1.1; }
     .cp-diagram { width: 70px; }
     .cp-diagrams { padding: 6pt 0; margin-bottom: 10pt; }
 }

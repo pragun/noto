@@ -20,3 +20,19 @@ noto.registerShiftWatch = function(dotnetRef) {
         dotnetRef.invokeMethodAsync('OnShiftChanged', false);
     });
 };
+
+// Toggle a class on document.body. Used by pages that need page-scoped layout.
+noto.setBodyClass = function(name, on) {
+    if (on) document.body.classList.add(name);
+    else document.body.classList.remove(name);
+};
+
+// Go back if there's session history, otherwise navigate to fallback.
+// history.length > 1 means we have a prior entry in this tab.
+noto.backOr = function(fallback) {
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        window.location.href = fallback;
+    }
+};

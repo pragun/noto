@@ -11,31 +11,84 @@
     <button class="btn-zen primary" @onclick="NewSong">+ new song</button>
 </div>
 
-<div class="note-stream-label">@songs.Count songs</div>
-
-@if (songs.Count == 0)
-{
-    <div class="empty-state">
-        <div class="icon">♪</div>
-        <p>no songs yet.<br/>create one to start building a chord sheet.</p>
-    </div>
-}
-
-@foreach (var s in songs)
-{
-    <div class="note-card" style="cursor:pointer; border-left-color:var(--matcha-dim);"
-         @onclick="() => Open(s.Id)">
-        <div class="note-card-meta">
-            <span class="note-type-tag tag-capture">song</span>
-            <span class="note-time">@s.UpdatedAt.ToLocalTime().ToString("MMM d")</span>
+<div class="songs-layout">
+    <div class="songs-main">
+        <div class="note-stream-label">
+            @filteredSongs.Count songs
+            @if (selectedArtist != null)
+            {
+                <span> · @selectedArtist <button class="btn-zen" style="margin-left:6px; font-size:9px; padding:1px 6px;" @onclick="ClearFilter">clear</button></span>
+            }
         </div>
-        <div class="note-title">@(GetTitleFromBody(s.Body) ?? s.Title ?? "(untitled)")</div>
-        <div class="note-preview" style="font-size:10px; color:var(--slate);">@GetMetaSummary(s.Body)</div>
+
+        @if (filteredSongs.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="icon">♪</div>
+                <p>no songs.<br/>create one to start building a chord sheet.</p>
+            </div>
+        }
+
+        @foreach (var s in filteredSongs)
+        {
+            <div class="note-card" style="cursor:pointer; border-left-color:var(--matcha-dim);"
+                 @onclick="() => Open(s.Id)">
+                <div class="note-card-meta">
+                    <span class="note-type-tag tag-capture">song</span>
+                    <span class="note-time">@s.UpdatedAt.ToLocalTime().ToString("MMM d")</span>
+                </div>
+                <div class="note-title">@(GetTitleFromBody(s.Body) ?? s.Title ?? "(untitled)")</div>
+                <div class="note-preview" style="font-size:10px; color:var(--slate);">@GetMetaSummary(s.Body)</div>
+            </div>
+        }
     </div>
-}
+
+    <aside class="songs-aside">
+        <div class="aside-label">artists</div>
+        <div class="aside-list">
+            <button class="aside-item @(selectedArtist == null ? "active" : "")" @onclick="ClearFilter">
+                <span>all</span><span class="aside-count">@songs.Count</span>
+            </button>
+            @foreach (var (artist, count) in artistCounts)
+            {
+                <button class="aside-item @(selectedArtist == artist ? "active" : "")" @onclick="() => SelectArtist(artist)">
+                    <span>@artist</span><span class="aside-count">@count</span>
+                </button>
+            }
+            @if (unattributedCount > 0)
+            {
+                <button class="aside-item @(selectedArtist == UNATTRIBUTED ? "active" : "")" @onclick="() => SelectArtist(UNATTRIBUTED)">
+                    <span class="muted">— unattributed —</span><span class="aside-count">@unattributedCount</span>
+                </button>
+            }
+        </div>
+    </aside>
+</div>
 
 @code {
+    private const string UNATTRIBUTED = "__unattributed__";
     private List<Entity> songs = [];
+    private string? selectedArtist = null;
+
+    private List<Entity> filteredSongs => selectedArtist switch
+    {
+        null => songs,
+        UNATTRIBUTED => songs.Where(s => GetArtistFromBody(s.Body) == null).ToList(),
+        _ => songs.Where(s => GetArtistFromBody(s.Body) == selectedArtist).ToList(),
+    };
+
+    private List<(string artist, int count)> artistCounts =>
+        songs.Select(s => GetArtistFromBody(s.Body))
+             .Where(a => a != null)
+             .GroupBy(a => a!)
+             .Select(g => (g.Key, g.Count()))
+             .OrderBy(t => t.Key, StringComparer.OrdinalIgnoreCase)
+             .ToList();
+
+    private int unattributedCount => songs.Count(s => GetArtistFromBody(s.Body) == null);
+
+    private void SelectArtist(string a) => selectedArtist = a;
+    private void ClearFilter() => selectedArtist = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -59,12 +112,19 @@
         }).OrderByDescending(e => e.UpdatedAt).ToList();
     }
 
+    private string? GetArtistFromBody(string? body)
+    {
+        if (body == null) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:artist|a|subtitle|st):\s*(.+?)\}");
+        return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
     private async Task NewSong()
     {
         var template = "{title: New Song}\n{key: G}\n{capo: 0}\n\n{soc}\n[G]Verse [C]lyrics [D]here\n{eoc}\n";
         var meta = System.Text.Json.JsonDocument.Parse("{\"render\":\"chord-sheet\"}");
         var entity = await Svc.Create(EntityTypes.Capture, "New Song", template, meta);
-        Nav.NavigateTo($"/entity/{entity.Id}");
+        Nav.NavigateTo($"/entity/{entity.Id}?edit=true");
     }
 
     private void Open(Guid id) => Nav.NavigateTo($"/entity/{id}");
@@ -80,6 +140,8 @@
     {
         if (body == null) return "";
         var parts = new List<string>();
+        var artist = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:artist|a|subtitle|st):\s*(.+?)\}");
+        if (artist.Success) parts.Add(artist.Groups[1].Value.Trim());
         var key = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:key|k):\s*(.+?)\}");
         if (key.Success) parts.Add("key " + key.Groups[1].Value.Trim());
         var capo = System.Text.RegularExpressions.Regex.Match(body, @"\{capo:\s*(.+?)\}");

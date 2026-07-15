@@ -16,10 +16,10 @@ async function loadLibs() {
     if (_libsLoaded) return _libsLoaded;
     _libsLoaded = (async () => {
         if (!window.ChordSheetJS) {
-            await loadScript('https://cdn.jsdelivr.net/npm/chordsheetjs@9/lib/bundle.js');
+            await loadScript('/lib/js/chordsheetjs.min.js');
         }
         if (!window.svguitar) {
-            await loadScript('https://cdn.jsdelivr.net/npm/svguitar@2/dist/svguitar.umd.js');
+            await loadScript('/lib/js/svguitar.umd.js');
         }
     })();
     return _libsLoaded;
@@ -121,7 +121,21 @@ notoChordPro.render = async function(targetSelector, source, semitones, fallback
     fallbackTitle = prev.fallbackTitle;
 
     const { columnCount } = extractLayoutDirectives(source);
-    const cleanSource = source.replace(/\{columns?:\s*\d+\}\s*\n?/gi, '');
+    let cleanSource = source.replace(/\{columns?:\s*\d+\}\s*\n?/gi, '');
+    // Chord-progression-only lines (intro/interlude/outro): a line containing
+    // only [chords], pipes, and whitespace. ChordSheetJS would render each
+    // chord as a column with empty lyric — collapsing the inter-chord spacing
+    // and putting pipes on a separate row. Instead, strip the brackets so the
+    // line renders as plain monospace text and the source spacing is preserved.
+    cleanSource = cleanSource.split('\n').map(line => {
+        const stripped = line.replace(/\[[^\]]+\]/g, '');
+        // If what remains is only whitespace and pipe characters, treat as chord-only line.
+        if (line.includes('[') && /^[\s|]*$/.test(stripped)) {
+            // Replace # with a sentinel so ChordSheetJS doesn't treat it as a comment.
+            return line.replace(/\[([^\]]+)\]/g, '$1').replace(/#/g, '♯');
+        }
+        return line;
+    }).join('\n');
 
     const parser = new window.ChordSheetJS.ChordProParser();
     let song;
@@ -179,6 +193,10 @@ notoChordPro.render = async function(targetSelector, source, semitones, fallback
     html.push('<button data-cp-action="down">−1</button>');
     html.push('<button data-cp-action="reset">reset</button>');
     html.push('<button data-cp-action="up">+1</button>');
+    html.push('<span style="width:14px;"></span>');
+    html.push('<button data-cp-action="font-down" title="smaller text">A−</button>');
+    html.push('<button data-cp-action="font-reset" title="reset text size">A</button>');
+    html.push('<button data-cp-action="font-up" title="larger text">A+</button>');
     html.push('<span style="flex:1;"></span>');
     html.push('<button data-cp-action="print">print</button>');
     html.push('</div>');
@@ -221,6 +239,9 @@ notoChordPro.render = async function(targetSelector, source, semitones, fallback
     html.push('</div>');
     target.innerHTML = html.join('');
 
+    // Apply persisted font size (per-entity, from localStorage)
+    notoChordPro.applyFontSize(targetSelector);
+
     // Wire up control buttons
     target.querySelectorAll('button[data-cp-action]').forEach(function(btn) {
         const action = btn.getAttribute('data-cp-action');
@@ -229,6 +250,9 @@ notoChordPro.render = async function(targetSelector, source, semitones, fallback
             else if (action === 'up') notoChordPro.bump(targetSelector, 1);
             else if (action === 'reset') notoChordPro.bump(targetSelector, 0, true);
             else if (action === 'print') notoChordPro.print();
+            else if (action === 'font-down') notoChordPro.bumpFont(targetSelector, -1);
+            else if (action === 'font-up') notoChordPro.bumpFont(targetSelector, 1);
+            else if (action === 'font-reset') notoChordPro.bumpFont(targetSelector, 0, true);
         });
     });
 
@@ -276,4 +300,50 @@ notoChordPro.bump = function(targetSelector, delta, reset) {
 
 notoChordPro.print = function() {
     window.print();
+};
+
+// Per-entity persisted font size for the chord sheet (controls both screen + print).
+// Stored in localStorage keyed by the entity UUID parsed from /entity/{id}.
+// 0 = default (no override). Steps of 1px on screen, 1pt on print.
+notoChordPro._fontStepPx = 1;
+notoChordPro._fontStepPt = 1;
+notoChordPro._fontDefaultPx = 12;
+notoChordPro._fontDefaultPt = 10;
+
+function _entityIdFromUrl() {
+    const m = location.pathname.match(/\/entity\/([0-9a-fA-F-]{36})/);
+    return m ? m[1] : null;
+}
+function _fontKey() {
+    const id = _entityIdFromUrl();
+    return id ? 'noto-cp-fontstep-' + id : null;
+}
+function _getFontStep() {
+    const k = _fontKey();
+    if (!k) return 0;
+    const v = parseInt(localStorage.getItem(k) || '0', 10);
+    return isNaN(v) ? 0 : Math.max(-4, Math.min(8, v));
+}
+function _setFontStep(step) {
+    const k = _fontKey();
+    if (!k) return;
+    if (step === 0) localStorage.removeItem(k);
+    else localStorage.setItem(k, String(step));
+}
+
+notoChordPro.applyFontSize = function(targetSelector) {
+    const target = document.querySelector(targetSelector);
+    if (!target) return;
+    const step = _getFontStep();
+    const px = notoChordPro._fontDefaultPx + step * notoChordPro._fontStepPx;
+    const pt = notoChordPro._fontDefaultPt + step * notoChordPro._fontStepPt;
+    target.style.setProperty('--cp-font-pt', px + 'px');
+    target.style.setProperty('--cp-print-pt', pt + 'pt');
+};
+
+notoChordPro.bumpFont = function(targetSelector, delta, reset) {
+    const cur = _getFontStep();
+    const next = reset ? 0 : cur + delta;
+    _setFontStep(next);
+    notoChordPro.applyFontSize(targetSelector);
 };

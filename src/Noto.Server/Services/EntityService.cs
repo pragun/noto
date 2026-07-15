@@ -57,12 +57,17 @@ public class EntityService
             .FirstOrDefaultAsync(e => e.Id == id);
     }
 
-    public async Task<List<Entity>> GetStream(int page = 0, int pageSize = 20, string? type = null)
+    public async Task<List<Entity>> GetStream(int page = 0, int pageSize = 20, string? type = null, bool excludeChordSheets = false)
     {
         var query = _db.Entities.Where(e => e.DeletedAt == null);
 
         if (type != null)
             query = query.Where(e => e.Type == type);
+
+        if (excludeChordSheets)
+            query = query.Where(e =>
+                e.Meta == null ||
+                !EF.Functions.JsonContains(e.Meta, @"{""render"":""chord-sheet""}"));
 
         return await query
             .Include(e => e.LinksFrom).ThenInclude(l => l.To)
@@ -139,10 +144,14 @@ public class EntityService
         return trashed.Count;
     }
 
-    public async Task<int> Count(string? type = null)
+    public async Task<int> Count(string? type = null, bool excludeChordSheets = false)
     {
         var query = _db.Entities.Where(e => e.DeletedAt == null);
         if (type != null) query = query.Where(e => e.Type == type);
+        if (excludeChordSheets)
+            query = query.Where(e =>
+                e.Meta == null ||
+                !EF.Functions.JsonContains(e.Meta, @"{""render"":""chord-sheet""}"));
         return await query.CountAsync();
     }
 

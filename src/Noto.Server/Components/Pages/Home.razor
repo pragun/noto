@@ -65,13 +65,21 @@ else
                 <span class="note-time">@e.CreatedAt.ToLocalTime().ToString("HH:mm")</span>
                 <span class="note-id">@e.Id.ToString()[..8]</span>
             </div>
-            @if (e.Title != null)
+            @if (IsChordSheet(e))
             {
-                <div class="note-title">@e.Title</div>
+                <div class="note-title">@(GetSongTitle(e) ?? e.Title ?? "(untitled song)")</div>
+                <div class="note-preview" style="font-size:10px; color:var(--slate);">@GetSongSummary(e.Body)</div>
             }
-            @if (e.Body != null)
+            else
             {
-                <div class="note-preview">@e.Body</div>
+                @if (e.Title != null)
+                {
+                    <div class="note-title">@e.Title</div>
+                }
+                @if (e.Body != null)
+                {
+                    <div class="note-preview">@e.Body</div>
+                }
             }
             @{
                 var threads = e.LinksFrom.Where(l => l.Reason == "tagged" && l.To != null).Select(l => l.To).ToList();
@@ -137,8 +145,8 @@ else
 
     private async Task LoadEntities()
     {
-        entities = await Svc.GetStream(page: 0, pageSize: (page + 1) * 20);
-        totalCount = await Svc.Count();
+        entities = await Svc.GetStream(page: 0, pageSize: (page + 1) * 20, excludeChordSheets: true);
+        totalCount = await Svc.Count(excludeChordSheets: true);
     }
 
     private async Task LoadMore()
@@ -192,4 +200,36 @@ else
         "stash" => "tag-stash",
         _ => ""
     };
+
+    private bool IsChordSheet(Entity e)
+    {
+        if (e.Meta == null) return false;
+        try
+        {
+            if (e.Meta.RootElement.TryGetProperty("render", out var r))
+                return r.GetString() == "chord-sheet";
+        }
+        catch { }
+        return false;
+    }
+
+    private string? GetSongTitle(Entity e)
+    {
+        if (e.Body == null) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(e.Body, @"\{(?:title|t):\s*(.+?)\}");
+        return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
+    private string GetSongSummary(string? body)
+    {
+        if (body == null) return "";
+        var parts = new List<string>();
+        var artist = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:artist|a|subtitle|st):\s*(.+?)\}");
+        if (artist.Success) parts.Add(artist.Groups[1].Value.Trim());
+        var key = System.Text.RegularExpressions.Regex.Match(body, @"\{(?:key|k):\s*(.+?)\}");
+        if (key.Success) parts.Add("key " + key.Groups[1].Value.Trim());
+        var capo = System.Text.RegularExpressions.Regex.Match(body, @"\{capo:\s*(.+?)\}");
+        if (capo.Success && capo.Groups[1].Value.Trim() != "0") parts.Add("capo " + capo.Groups[1].Value.Trim());
+        return string.Join(" · ", parts);
+    }
 }
