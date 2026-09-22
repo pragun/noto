@@ -79,8 +79,19 @@ say "Waiting for the agent and cloud-init (installing docker + tailscale, a few 
 for _ in $(seq 1 120); do inside true 2>/dev/null && break; sleep 5; done
 inside true 2>/dev/null || die "VM agent never came up — check 'lxc console $NAME'"
 
-inside cloud-init status --wait || die "cloud-init failed — check 'lxc exec $NAME -- cloud-init status --long'"
-inside test -f /var/lib/cloud/noto-ready || die "cloud-init finished but the noto marker is missing"
+# `cloud-init status --wait` exits 2 for "finished, with recoverable errors",
+# which is common and usually harmless. Only a hard failure should stop us, and
+# either way the marker file is the real test of whether our runcmd completed.
+ci_rc=0; inside cloud-init status --wait || ci_rc=$?
+[[ $ci_rc -eq 2 ]] && printf '\033[33mwarning: cloud-init reported recoverable errors\033[0m\n'
+
+if ! inside test -f /var/lib/cloud/noto-ready; then
+    printf '\n\033[31m--- cloud-init status ---\033[0m\n'
+    inside cloud-init status --long || true
+    printf '\n\033[31m--- last 60 lines of cloud-init-output.log ---\033[0m\n'
+    inside tail -n 60 /var/log/cloud-init-output.log || true
+    die "cloud-init did not finish the noto setup (status exit $ci_rc)"
+fi
 
 # ------------------------------------------------------------------ tailnet --
 if inside_sh 'tailscale status --json 2>/dev/null | grep -q "\"BackendState\":\"Running\""'; then

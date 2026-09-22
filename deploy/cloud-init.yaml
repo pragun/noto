@@ -5,7 +5,8 @@
 # so the auth key never lands in cloud-init state on disk.
 
 package_update: true
-package_upgrade: true
+# Deliberately no package_upgrade: it adds minutes and a transient-failure
+# surface on every provision, and unattended-upgrades patches the box anyway.
 
 packages:
   - ca-certificates
