@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew the Tailscale TLS certificate for noto
+
+[Timer]
+# Tailscale certs are ~90 day Let's Encrypt certs and renew within the last 30.
+# Checking daily leaves a wide margin and costs nothing when there is no work.
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Noto.Server.Components;
 using Noto.Server.Data;
@@ -19,10 +20,23 @@ builder.Services.AddScoped<OpenRouterClient>();
 builder.Services.AddScoped<AiConversationService>();
 builder.Services.AddHttpClient("Embeddings");
 builder.Services.AddHttpClient("OpenRouter");
-// EmbeddingWorker available but not auto-started — embed on demand via CLI or future UI trigger
+
+// The worker has to run wherever the embedding endpoint lives (Ollama on the laptop),
+// not necessarily wherever the app runs. Disable it on hosts that can't reach one.
+if (builder.Configuration.GetValue("Embeddings:RunWorker", true))
+    builder.Services.AddHostedService<EmbeddingWorker>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// The proxy is on the loopback interface, so the default known-proxy allowlist
+// (which only trusts ::1) would drop its headers — clear it and trust the hop.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 var app = builder.Build();
 
@@ -41,6 +55,10 @@ using (var scope = app.Services.CreateScope())
         endpoint: endpoint,
         dimensions: 1024);
 }
+
+// Behind `tailscale serve` (or any TLS-terminating proxy) Kestrel sees plain HTTP.
+// Without this the app builds http:// URLs and the Blazor circuit can fail to connect.
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

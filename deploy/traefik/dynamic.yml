@@ -1,0 +1,21 @@
+# Traefik dynamic configuration (file provider, watched — edits apply live).
+#
+# The certificate is issued by `tailscale cert`, not by Traefik's ACME resolver:
+# nothing here is reachable from the public internet, so the HTTP-01 challenge
+# can never complete. Tailscale gets a real Let's Encrypt cert for the
+# <host>.<tailnet>.ts.net name through its own control plane, which is why iOS
+# trusts it and the PWA installs. A systemd timer on the host renews it; this
+# file provider watches the directory and reloads without a restart.
+
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/noto.crt
+        keyFile: /certs/noto.key
+  certificates:
+    - certFile: /certs/noto.crt
+      keyFile: /certs/noto.key
+  options:
+    default:
+      minVersion: VersionTLS12

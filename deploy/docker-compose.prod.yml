@@ -1,0 +1,89 @@
+name: noto
+
+# Production stack. Differences from the dev compose at the repo root:
+#   - app is a published image built from src/Noto.Server/Dockerfile, not the SDK
+#     image running `dotnet run` against a bind-mounted source tree
+#   - no ollama (it runs on the laptop; see EMBEDDINGS_ENDPOINT)
+#   - traefik terminates TLS, using a cert issued by `tailscale cert`
+#   - the app is not published to the host at all; only traefik is
+#   - no default passwords
+#
+# ufw (see cloud-init.yaml) only admits traffic arriving on tailscale0, so
+# binding traefik to 0.0.0.0 still means tailnet-only in practice.
+
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: noto-traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --log.level=INFO
+      - --accesslog=false
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ${CERT_DIR:-/etc/noto/certs}:/certs:ro
+    depends_on:
+      - app
+
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: noto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: noto
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: noto
+    volumes:
+      - ${NOTO_DATA:-/srv/noto-data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noto"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Loopback only, so pg_dump / psql work over `lxc exec` without exposing 5432.
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  app:
+    build:
+      context: ..
+      dockerfile: src/Noto.Server/Dockerfile
+    image: noto-app:latest
+    container_name: noto-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Noto: "Host=db;Port=5432;Database=noto;Username=noto;Password=${POSTGRES_PASSWORD}"
+      Storage__MediaRoot: /data/media
+
+      # Ollama lives on the laptop, reachable over the tailnet. When it is asleep
+      # the worker fails and retries; the backlog shows up on /admin and drains
+      # the next time the laptop is awake.
+      Embeddings__Endpoint: ${EMBEDDINGS_ENDPOINT:?set EMBEDDINGS_ENDPOINT in .env}
+      Embeddings__RunWorker: "true"
+
+      OpenRouter__ApiKey: ${OPENROUTER_KEY:-}
+      Whisper__ApiKey: ${OPENAI_KEY:-}
+    volumes:
+      - ${NOTO_DATA:-/srv/noto-data}/media:/data/media
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.noto.rule=Host(`${TS_FQDN:?set TS_FQDN in .env}`)
+      - traefik.http.routers.noto.entrypoints=websecure
+      - traefik.http.routers.noto.tls=true
+      - traefik.http.services.noto.loadbalancer.server.port=5100

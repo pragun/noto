@@ -1,0 +1,209 @@
+@page "/admin"
+@using Noto.Server.Services
+@using Noto.Shared.Models
+@inject EmbeddingService Emb
+
+<div class="page-date">manage</div>
+<div class="page-title">admin</div>
+
+<div style="display:flex; gap:8px; margin-bottom:20px;">
+    <button class="btn-zen" @onclick="Refresh" disabled="@busy">refresh</button>
+    <button class="btn-zen" @onclick="Ping" disabled="@busy">test endpoint</button>
+    @if (active != null && backlog > 0)
+    {
+        <button class="btn-zen" @onclick="EmbedBatch" disabled="@busy">
+            @(busy ? "embedding…" : $"embed next {Math.Min(backlog, BatchSize)} now")
+        </button>
+    }
+    @if (active != null && chunks > 0)
+    {
+        <button class="btn-zen danger" @onclick="ReEmbed" disabled="@busy">
+            @(confirmReEmbed ? "confirm — drops all vectors" : "re-embed everything")
+        </button>
+    }
+</div>
+
+@if (ping != null)
+{
+    <div class="note-card" style="border-left-color:@(pingOk ? "var(--matcha)" : "var(--red)");">
+        <div class="note-card-meta"><span class="note-type-tag">endpoint</span></div>
+        <div class="note-preview">@ping</div>
+    </div>
+}
+
+<div class="nav-section-label" style="margin-top:20px;">embeddings</div>
+
+@if (active == null)
+{
+    <div class="empty-state">
+        <div class="icon">⊘</div>
+        <p>no active embedding provider</p>
+    </div>
+}
+else
+{
+    <div class="note-card">
+        <div class="note-card-meta">
+            <span class="note-type-tag">@active.Provider</span>
+            <span class="note-time">@active.ModelId · @active.Dimensions&thinsp;d</span>
+        </div>
+        <div class="note-title">@active.Name</div>
+        <div class="note-preview" style="word-break:break-all;">@(active.Endpoint ?? "in-process")</div>
+
+        <div style="margin-top:12px;">
+            <div style="height:4px; background:var(--chalk); overflow:hidden;">
+                <div style="height:100%; width:@(Pct)%; background:@(backlog == 0 ? "var(--matcha)" : "var(--amber)");"></div>
+            </div>
+            <div style="font-size:10px; color:var(--slate); margin-top:6px;">
+                @embedded of @eligible embedded (@Pct%) · @chunks chunks
+                @if (backlog > 0)
+                {
+                    <span> · <strong style="color:var(--amber);">@backlog waiting</strong></span>
+                }
+                @if (lastAt != null)
+                {
+                    <span> · last @lastAt.Value.ToLocalTime().ToString("MMM d HH:mm")</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (backlog > 0)
+    {
+        <div style="font-size:10px; color:var(--slate); margin:16px 0 8px;">
+            oldest waiting — search will not find these yet
+        </div>
+        @foreach (var e in preview)
+        {
+            <div class="note-card" style="opacity:0.75; border-left-color:rgba(196,163,90,0.4);">
+                <div class="note-card-meta">
+                    <span class="note-type-tag">@e.Type</span>
+                    <span class="note-time">@e.CreatedAt.ToLocalTime().ToString("MMM d HH:mm")</span>
+                </div>
+                @if (e.Title != null)
+                {
+                    <div class="note-title">@e.Title</div>
+                }
+                @if (e.Body != null)
+                {
+                    <div class="note-preview">@Truncate(e.Body, 120)</div>
+                }
+            </div>
+        }
+        @if (backlog > preview.Count)
+        {
+            <div style="font-size:10px; color:var(--slate);">…and @(backlog - preview.Count) more</div>
+        }
+    }
+    else
+    {
+        <div style="font-size:10px; color:var(--slate);">nothing waiting — the archive is fully searchable</div>
+    }
+}
+
+@if (providers.Count > 1)
+{
+    <div class="nav-section-label" style="margin-top:24px;">all providers</div>
+    @foreach (var p in providers)
+    {
+        <div class="note-card" style="opacity:@(p.IsActive ? "1" : "0.6");">
+            <div class="note-card-meta">
+                <span class="note-type-tag">@(p.IsActive ? "active" : "inactive")</span>
+                <span class="note-time">@p.ModelId · @p.Dimensions&thinsp;d · @counts.GetValueOrDefault(p.Id) vectors</span>
+            </div>
+            <div class="note-title">@p.Name</div>
+        </div>
+    }
+}
+
+@code {
+    private const int BatchSize = 25;
+
+    private EmbeddingProvider? active;
+    private List<EmbeddingProvider> providers = [];
+    private Dictionary<Guid, int> counts = [];
+    private List<Entity> preview = [];
+    private int embedded, eligible, backlog, chunks;
+    private bool confirmReEmbed;
+    private DateTime? lastAt;
+    private string? ping;
+    private bool pingOk;
+    private bool busy;
+
+    private int Pct => eligible == 0 ? 100 : (int)Math.Round(embedded * 100.0 / eligible);
+
+    protected override async Task OnInitializedAsync() => await Refresh();
+
+    private async Task Refresh()
+    {
+        active = await Emb.GetActiveProvider();
+        providers = await Emb.GetAllProviders();
+        eligible = await Emb.GetEligibleCount();
+
+        counts = [];
+        foreach (var p in providers)
+            counts[p.Id] = await Emb.GetEmbeddedCount(p.Id);
+
+        if (active == null)
+        {
+            embedded = backlog = chunks = 0;
+            preview = [];
+            lastAt = null;
+            return;
+        }
+
+        chunks = counts.GetValueOrDefault(active.Id);
+        embedded = await Emb.GetEmbeddedEntityCount(active.Id);
+        backlog = await Emb.GetUnembeddedCount(active.Id);
+        preview = backlog > 0 ? await Emb.GetUnembeddedPreview(active.Id) : [];
+        lastAt = await Emb.GetLastEmbeddedAt(active.Id);
+    }
+
+    private async Task ReEmbed()
+    {
+        if (active == null) return;
+        if (!confirmReEmbed) { confirmReEmbed = true; return; }
+
+        confirmReEmbed = false;
+        busy = true;
+        try
+        {
+            var dropped = await Emb.ClearEmbeddings(active.Id);
+            pingOk = true;
+            ping = $"dropped {dropped} vectors — the worker will rebuild them";
+            await Refresh();
+        }
+        finally { busy = false; }
+    }
+
+    private async Task Ping()
+    {
+        if (active == null) { ping = "no active provider to test"; pingOk = false; return; }
+        busy = true;
+        try
+        {
+            (pingOk, ping) = await Emb.PingProvider(active);
+        }
+        finally { busy = false; }
+    }
+
+    private async Task EmbedBatch()
+    {
+        if (active == null) return;
+        busy = true;
+        try
+        {
+            var ids = await Emb.GetUnembeddedEntityIds(active.Id, BatchSize);
+            var ok = 0;
+            foreach (var id in ids)
+                if (await Emb.EmbedEntity(id, active)) ok++;
+
+            pingOk = ok == ids.Count;
+            ping = $"embedded {ok} of {ids.Count}";
+            await Refresh();
+        }
+        finally { busy = false; }
+    }
+
+    private static string Truncate(string s, int n) => s.Length <= n ? s : s[..n] + "…";
+}

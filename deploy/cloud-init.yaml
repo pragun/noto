@@ -1,0 +1,56 @@
+#cloud-config
+# Brings a fresh Ubuntu VM to the point where noto can be deployed onto it:
+# Docker (for the app), Tailscale (for access), and the data directories.
+# Deliberately does NOT join the tailnet or start noto — provision.sh does that,
+# so the auth key never lands in cloud-init state on disk.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - rsync
+  - postgresql-client
+  - ufw
+
+write_files:
+  - path: /etc/sysctl.d/99-noto.conf
+    content: |
+      # Tailscale forwards packets for subnet routes / exit nodes.
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+
+runcmd:
+  # ---- Docker (official repo, not the distro package) ----
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - >
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc]
+    https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable"
+    > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+
+  # ---- Tailscale (installed, not authenticated) ----
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - systemctl enable --now tailscaled
+
+  # ---- Layout ----
+  - mkdir -p /opt/noto /srv/noto-data/postgres /srv/noto-data/media /etc/noto/certs
+  - sysctl --system
+
+  # ---- Firewall: nothing but tailnet traffic reaches this box ----
+  # Only traefik is published, and only tailscale0 is admitted.
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow in on tailscale0
+  - ufw allow 22/tcp
+  # 80/443 are published by traefik but only reachable via tailscale0 above;
+  # they are deliberately NOT opened to the world here.
+  - ufw --force enable
+
+  - touch /var/lib/cloud/noto-ready

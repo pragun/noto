@@ -1,0 +1,20 @@
+[Unit]
+Description=Issue/renew the Tailscale TLS certificate Traefik serves
+After=tailscaled.service
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/noto/cert.env
+# tailscale cert is a no-op when the existing cert is still fresh, so this is
+# safe to run often. Traefik's file provider watches /certs and reloads itself.
+ExecStart=/usr/bin/tailscale cert \
+    --cert-file /etc/noto/certs/noto.crt \
+    --key-file /etc/noto/certs/noto.key \
+    ${TS_FQDN}
+# Traefik runs as root in-container and mounts /certs read-only; keep the key
+# unreadable to everyone else on the box.
+ExecStartPost=/bin/chmod 0640 /etc/noto/certs/noto.key
+
+[Install]
+WantedBy=multi-user.target

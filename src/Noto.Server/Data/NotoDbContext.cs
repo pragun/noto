@@ -92,6 +92,8 @@ public class NotoDbContext : DbContext
             emb.Property(x => x.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             emb.Property(x => x.EntityId).HasColumnName("entity_id");
             emb.Property(x => x.ProviderId).HasColumnName("provider_id");
+            emb.Property(x => x.ChunkIndex).HasColumnName("chunk_index").HasDefaultValue(0);
+            emb.Property(x => x.ChunkText).HasColumnName("chunk_text");
             emb.Property(x => x.Vector).HasColumnName("vector").HasColumnType("vector");
             emb.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
 
@@ -100,9 +102,9 @@ public class NotoDbContext : DbContext
             emb.HasOne(x => x.EmbeddingProvider).WithMany(ep => ep.Embeddings)
                 .HasForeignKey(x => x.ProviderId).OnDelete(DeleteBehavior.Cascade);
 
-            // Unique: one embedding per entity per provider
-            emb.HasIndex(x => new { x.EntityId, x.ProviderId })
-                .HasDatabaseName("idx_embeddings_entity_provider")
+            // Unique: one embedding per entity per provider per chunk
+            emb.HasIndex(x => new { x.EntityId, x.ProviderId, x.ChunkIndex })
+                .HasDatabaseName("idx_embeddings_entity_provider_chunk")
                 .IsUnique();
 
             emb.HasIndex(x => x.ProviderId).HasDatabaseName("idx_embeddings_provider");
