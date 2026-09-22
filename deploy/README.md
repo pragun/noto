@@ -18,22 +18,49 @@ Docker inside unprivileged LXC needs `security.nesting=true`, and Tailscale need
 the whole class of problem for a few hundred MB of RAM, and noto's entire
 footprint is around 110MB of data.
 
+## Which script runs where
+
+These usually are not the same machine, so each script says so up front.
+
+| script | runs on | needs |
+|---|---|---|
+| `provision.sh` | the **LXD host** | `lxc`, a clone of this repo, `deploy/.env` |
+| `export-local.sh` | the **Mac** | docker + the dev stack running |
+| `import-data.sh` | the **LXD host**, or **inside the VM** | the archive from `export-local.sh` |
+
+`provision.sh` drives the VM through `lxc`, so it has to run where LXD is. Clone
+the repo there and put `deploy/.env` next to it.
+
 ## First run
+
+On the LXD host:
 
 ```bash
 cp deploy/env.example deploy/.env
 $EDITOR deploy/.env                 # password, embedding endpoint, API keys
 
 TS_AUTHKEY=tskey-auth-... ./deploy/provision.sh
-./deploy/migrate-data.sh
 ```
 
-`provision.sh` creates the VM, waits out cloud-init (Docker + Tailscale + firewall),
-joins the tailnet, copies the repo in, builds the image, starts the stack, and
-publishes it on HTTPS. It's re-runnable — run it again to redeploy after a commit.
+It creates the VM, waits out cloud-init (Docker + Tailscale + firewall), joins the
+tailnet, issues the certificate, copies the repo in, builds the image and starts
+the stack behind Traefik. Re-runnable — run it again to redeploy after a commit.
 
-`migrate-data.sh` dumps the laptop's database and media and restores them into the
-VM. One-directional and destructive on the target; it asks before doing it.
+Then move the data across. On the Mac:
+
+```bash
+./deploy/export-local.sh            # -> noto-export-<timestamp>.tar
+scp noto-export-*.tar you@lxd-host:/tmp/
+```
+
+And on the LXD host (or scp it straight to the VM over Tailscale SSH and run it
+there — `import-data.sh` detects which side it is on):
+
+```bash
+./deploy/import-data.sh /tmp/noto-export-*.tar
+```
+
+Destructive on the target: the database is dropped and recreated. It asks first.
 
 ## Before you start
 

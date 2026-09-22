@@ -139,7 +139,8 @@ $(printf '\033[1m==> noto is up\033[0m')
   admin:          https://$TS_FQDN/admin
 
 Next:
-  1. Move your data across:   ./deploy/migrate-data.sh $NAME
+  1. Move your data across — on the Mac: ./deploy/export-local.sh
+     then here (or inside the VM):       ./deploy/import-data.sh <archive.tar> $NAME
   2. Make Ollama reachable on the Mac so embeddings can run:
        sudo launchctl setenv OLLAMA_HOST 0.0.0.0   (then relaunch Ollama)
      and check EMBEDDINGS_ENDPOINT in deploy/.env points at the Mac's tailnet name.
