@@ -1,7 +1,7 @@
 # Deploying noto to an LXD VM on the tailnet
 
-The shape: noto runs in a VM, reachable only over Tailscale, with `tailscale serve`
-terminating TLS. Ollama stays on the laptop — the VM reaches it over the tailnet
+The shape: noto runs in a VM, reachable only over Tailscale, with Traefik
+terminating TLS on a certificate issued by `tailscale cert`. Ollama stays on the laptop — the VM reaches it over the tailnet
 when the laptop is awake, and shows a backlog on `/admin` when it isn't.
 
     iPhone ─┐
