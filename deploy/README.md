@@ -43,7 +43,12 @@ Then:
 cp deploy/env.example deploy/.env
 $EDITOR deploy/.env                 # embedding endpoint + API keys
 
-TS_AUTHKEY=tskey-auth-... ./deploy/provision.sh
+# Put the auth key in a file rather than on the command line — an inline
+# key lands in your shell history and in `ps` output. provision.sh reads it
+# automatically and deletes it once the VM has joined.
+printf %s 'tskey-auth-...' > deploy/.ts-authkey && chmod 600 deploy/.ts-authkey
+
+./deploy/provision.sh
 ```
 
 It creates the VM, waits out cloud-init (Docker + Tailscale + firewall), joins the

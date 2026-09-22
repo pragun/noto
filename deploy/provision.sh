@@ -14,6 +14,11 @@
 #   TS_AUTHKEY  tailnet auth key — REQUIRED to create a new VM. Not needed when
 #               redeploying to a VM that is already on the tailnet. Generate at
 #               https://login.tailscale.com/admin/settings/keys
+#
+#               Prefer putting it in deploy/.ts-authkey (gitignored, chmod 600)
+#               over passing it inline: an inline key lands in your shell history
+#               and in the process list. The file is read automatically and is
+#               deleted after a successful join.
 #   NAME        VM name           (default: noto)
 #   TS_HOSTNAME hostname on the tailnet (default: $NAME)
 #   MEMORY      (default: 4GiB)
@@ -50,13 +55,26 @@ command -v lxc >/dev/null || die "lxc not found — install LXD first"
 set -a; source "$DEPLOY_DIR/.env"; set +a
 [[ -n "${EMBEDDINGS_ENDPOINT:-}" ]] || die "EMBEDDINGS_ENDPOINT is empty in deploy/.env"
 
+# A key on the command line ends up in shell history and in ps output, so the
+# file is the preferred route. Read it only if the env var was not set.
+AUTHKEY_FILE="$DEPLOY_DIR/.ts-authkey"
+if [[ -z "${TS_AUTHKEY:-}" && -f "$AUTHKEY_FILE" ]]; then
+    TS_AUTHKEY="$(tr -d '[:space:]' < "$AUTHKEY_FILE")"
+    [[ -n "$TS_AUTHKEY" ]] && say "Using the auth key from deploy/.ts-authkey"
+fi
+
 # Creating a VM without an auth key strands it off the tailnet, and cloud-init
 # takes minutes — so refuse now rather than after the wait. A VM that already
 # exists may already be authenticated, so only new ones are blocked here.
 if ! lxc info "$NAME" >/dev/null 2>&1 && [[ -z "${TS_AUTHKEY:-}" ]]; then
     die "TS_AUTHKEY is required to create the VM '$NAME'.
 
-  Generate a key at https://login.tailscale.com/admin/settings/keys then:
+  Generate a key at https://login.tailscale.com/admin/settings/keys, then either:
+
+      printf %s 'tskey-auth-...' > deploy/.ts-authkey && chmod 600 deploy/.ts-authkey
+      $0
+
+  or pass it inline, accepting that it lands in your shell history:
 
       TS_AUTHKEY=tskey-auth-... $0
 
@@ -99,7 +117,16 @@ if inside_sh 'tailscale status --json 2>/dev/null | grep -q "\"BackendState\":\"
 else
     [[ -n "${TS_AUTHKEY:-}" ]] || die "not on the tailnet yet and TS_AUTHKEY is unset"
     say "Joining the tailnet as '$TS_HOSTNAME'"
-    inside tailscale up --authkey "$TS_AUTHKEY" --hostname "$TS_HOSTNAME" --ssh
+    # Piped in rather than passed as an argument: argv is world-readable in ps
+    # on the VM for as long as the command runs.
+    printf %s "$TS_AUTHKEY" \
+        | inside_sh "tailscale up --authkey \"\$(cat)\" --hostname '$TS_HOSTNAME' --ssh"
+
+    # Single-use once redeemed; leaving it on disk is pure downside.
+    if [[ -f "$AUTHKEY_FILE" ]]; then
+        rm -f "$AUTHKEY_FILE"
+        say "Removed deploy/.ts-authkey (the key has been redeemed)"
+    fi
 fi
 
 # Traefik terminates TLS here, so make sure nothing is left over from a previous

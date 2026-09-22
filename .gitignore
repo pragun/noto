@@ -41,3 +41,6 @@ src/Noto.Server/wwwroot/audio/*.aiff
 
 # EF migrations designer snapshot (auto-generated, can be large)
 # Keep migrations themselves
+
+# Tailscale auth key for deploy/provision.sh
+deploy/.ts-authkey
