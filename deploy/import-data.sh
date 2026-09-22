@@ -74,14 +74,17 @@ run '
 say "Restarting the app"
 run 'cd /opt/noto/deploy && docker compose -f docker-compose.prod.yml start app'
 
+# The app is not published to the host — traefik is the only way in — so the
+# health check has to go through it, resolving the cert's hostname to loopback.
+TS_FQDN="$(run 'tailscale status --json | python3 -c "import json,sys; print(json.load(sys.stdin)[\"Self\"][\"DNSName\"].rstrip(\".\"))"' 2>/dev/null || true)"
+[[ -n "$TS_FQDN" ]] || die "could not read the target's tailnet DNS name"
+
 for _ in $(seq 1 60); do
-    code="$(run 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5100/ || true')"
+    code="$(run "curl -s -o /dev/null -w '%{http_code}' --resolve '$TS_FQDN:443:127.0.0.1' 'https://$TS_FQDN/' || true")"
     [[ "$code" == "200" ]] && break
     sleep 5
 done
-[[ "${code:-}" == "200" ]] || die "app did not come back up — check 'docker logs noto-app' on the target"
-
-TS_FQDN="$(run 'tailscale status --json | python3 -c "import json,sys; print(json.load(sys.stdin)[\"Self\"][\"DNSName\"].rstrip(\".\"))"' 2>/dev/null || true)"
+[[ "${code:-}" == "200" ]] || die "app did not come back up (last status: ${code:-none}) — check 'docker logs noto-app' on the target"
 
 say "Done"
 cat <<EOF
