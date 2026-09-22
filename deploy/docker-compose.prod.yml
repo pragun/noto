@@ -43,8 +43,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: noto
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: noto
+      # Single-tenant box, port bound to loopback, reachable only over the tailnet.
+      # A password here would live in .env on the same machine as the shell that
+      # could read it, so it guards nothing. Applied at initdb time only.
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - ${NOTO_DATA:-/srv/noto-data}/postgres:/var/lib/postgresql/data
     healthcheck:
@@ -52,7 +55,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Loopback only, so pg_dump / psql work over `lxc exec` without exposing 5432.
+    # Loopback only: `lxc exec` / ssh get psql and pg_dump, the tailnet does not.
     ports:
       - "127.0.0.1:5432:5432"
 
@@ -68,7 +71,7 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Noto: "Host=db;Port=5432;Database=noto;Username=noto;Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__Noto: "Host=db;Port=5432;Database=noto;Username=noto"
       Storage__MediaRoot: /data/media
 
       # Ollama lives on the laptop, reachable over the tailnet. When it is asleep

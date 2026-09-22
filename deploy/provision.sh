@@ -39,10 +39,9 @@ inside_sh() { lxc exec "$NAME" -- bash -lc "$1"; }
 command -v lxc >/dev/null || die "lxc not found — install LXD first"
 [[ -f "$DEPLOY_DIR/.env" ]] || die "missing deploy/.env — copy deploy/env.example and fill it in"
 
-# Fail early on the values with no safe default, rather than halfway through.
+# Fail early on the one value with no safe default, rather than halfway through.
 # shellcheck disable=SC1091
 set -a; source "$DEPLOY_DIR/.env"; set +a
-[[ -n "${POSTGRES_PASSWORD:-}" ]]   || die "POSTGRES_PASSWORD is empty in deploy/.env"
 [[ -n "${EMBEDDINGS_ENDPOINT:-}" ]] || die "EMBEDDINGS_ENDPOINT is empty in deploy/.env"
 
 # ---------------------------------------------------------------- create VM --
@@ -141,9 +140,8 @@ $(printf '\033[1m==> noto is up\033[0m')
 Next:
   1. Move your data across — on the Mac: ./deploy/export-local.sh
      then here (or inside the VM):       ./deploy/import-data.sh <archive.tar> $NAME
-  2. Make Ollama reachable on the Mac so embeddings can run:
-       sudo launchctl setenv OLLAMA_HOST 0.0.0.0   (then relaunch Ollama)
-     and check EMBEDDINGS_ENDPOINT in deploy/.env points at the Mac's tailnet name.
+  2. Check EMBEDDINGS_ENDPOINT points at the Mac's tailnet name, then hit
+     "test endpoint" on /admin — it round-trips a token through Ollama.
   3. Drain the capture queue in the OLD PWA before installing the new one —
      IndexedDB is per-origin and queued notes do not follow you to $TS_FQDN.
 
