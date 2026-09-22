@@ -66,8 +66,8 @@ Destructive on the target: the database is dropped and recreated. It asks first.
 
 **Enable MagicDNS *and* HTTPS certificates** for your tailnet at
 [the DNS admin page](https://login.tailscale.com/admin/dns). Without the second one
-`tailscale serve` can't get a certificate, and iOS won't install the PWA or grant
-microphone access over a bad cert.
+`tailscale cert` can't issue the certificate Traefik serves, and iOS won't install
+the PWA or grant microphone access over a bad cert.
 
 **Make Ollama listen beyond loopback** on the Mac, or the VM can't reach it:
 
