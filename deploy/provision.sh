@@ -11,15 +11,22 @@
 #   TS_AUTHKEY=tskey-auth-... ./deploy/provision.sh
 #
 # Env:
+#   TS_AUTHKEY  tailnet auth key — REQUIRED to create a new VM. Not needed when
+#               redeploying to a VM that is already on the tailnet. Generate at
+#               https://login.tailscale.com/admin/settings/keys
 #   NAME        VM name           (default: noto)
-#   TS_AUTHKEY  tailnet auth key  (required on first run; generate at
-#               https://login.tailscale.com/admin/settings/keys)
 #   TS_HOSTNAME hostname on the tailnet (default: $NAME)
 #   MEMORY      (default: 4GiB)
 #   DISK        (default: 40GiB)
 #   IMAGE       (default: ubuntu:24.04)
 
 set -euo pipefail
+
+usage() {
+    sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+case "${1:-}" in -h|--help|help) usage 0 ;; esac
 
 NAME="${NAME:-noto}"
 TS_HOSTNAME="${TS_HOSTNAME:-$NAME}"
@@ -39,10 +46,22 @@ inside_sh() { lxc exec "$NAME" -- bash -lc "$1"; }
 command -v lxc >/dev/null || die "lxc not found — install LXD first"
 [[ -f "$DEPLOY_DIR/.env" ]] || die "missing deploy/.env — copy deploy/env.example and fill it in"
 
-# Fail early on the one value with no safe default, rather than halfway through.
 # shellcheck disable=SC1091
 set -a; source "$DEPLOY_DIR/.env"; set +a
 [[ -n "${EMBEDDINGS_ENDPOINT:-}" ]] || die "EMBEDDINGS_ENDPOINT is empty in deploy/.env"
+
+# Creating a VM without an auth key strands it off the tailnet, and cloud-init
+# takes minutes — so refuse now rather than after the wait. A VM that already
+# exists may already be authenticated, so only new ones are blocked here.
+if ! lxc info "$NAME" >/dev/null 2>&1 && [[ -z "${TS_AUTHKEY:-}" ]]; then
+    die "TS_AUTHKEY is required to create the VM '$NAME'.
+
+  Generate a key at https://login.tailscale.com/admin/settings/keys then:
+
+      TS_AUTHKEY=tskey-auth-... $0
+
+  (Not needed when redeploying to a VM that is already on the tailnet.)"
+fi
 
 # ---------------------------------------------------------------- create VM --
 if lxc info "$NAME" >/dev/null 2>&1; then
