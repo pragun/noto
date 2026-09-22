@@ -4,7 +4,8 @@ name: noto
 #   - app is a published image built from src/Noto.Server/Dockerfile, not the SDK
 #     image running `dotnet run` against a bind-mounted source tree
 #   - no ollama (it runs on the laptop; see EMBEDDINGS_ENDPOINT)
-#   - traefik terminates TLS, using a cert issued by `tailscale cert`
+#   - traefik terminates TLS, using a cert issued by `tailscale cert`, and is
+#     configured entirely from traefik/dynamic.yml (no docker socket)
 #   - the app is not published to the host at all; only traefik is
 #   - no default passwords
 #
@@ -17,8 +18,7 @@ services:
     container_name: noto-traefik
     restart: unless-stopped
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
+      # File provider only — see traefik/dynamic.yml for why there is no docker provider.
       - --providers.file.filename=/etc/traefik/dynamic.yml
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
@@ -31,7 +31,6 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - ${CERT_DIR:-/etc/noto/certs}:/certs:ro
     depends_on:
@@ -84,9 +83,3 @@ services:
       Whisper__ApiKey: ${OPENAI_KEY:-}
     volumes:
       - ${NOTO_DATA:-/srv/noto-data}/media:/data/media
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.noto.rule=Host(`${TS_FQDN:?set TS_FQDN in .env}`)
-      - traefik.http.routers.noto.entrypoints=websecure
-      - traefik.http.routers.noto.tls=true
-      - traefik.http.services.noto.loadbalancer.server.port=5100

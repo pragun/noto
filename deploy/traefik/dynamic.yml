@@ -19,3 +19,25 @@ tls:
   options:
     default:
       minVersion: VersionTLS12
+
+# Routing lives here rather than in docker labels. Traefik's docker provider
+# negotiates an API version older than Docker 28 accepts ("client version 1.24
+# is too old"), and with exactly one backend the provider bought nothing anyway.
+# Dropping it also means Traefik no longer needs the docker socket, which is
+# root-equivalent access to the host.
+#
+# No Host() match: this VM serves one app and is reachable only over the tailnet,
+# so matching every hostname avoids threading the ts.net name into this file.
+http:
+  routers:
+    noto:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - websecure
+      service: noto
+      tls: {}
+  services:
+    noto:
+      loadBalancer:
+        servers:
+          - url: "http://app:5100"
