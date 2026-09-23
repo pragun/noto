@@ -2186,3 +2186,25 @@ body.entity-chord-sheet .main-content {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--chalk); border-radius: 2px; }
+
+/* ── Entity editor ──────────────────────────────────────────────────────────
+   Songs are long; an 8-row box meant constant scrolling while editing a chord
+   sheet. Sized against the viewport so it fills the window on a laptop, with
+   resize left on for anyone who wants it bigger or smaller. */
+.entity-edit-body {
+    width: 100%;
+    min-height: 60vh;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--charcoal);
+    line-height: 1.8;
+    /* Chord sheets rely on column alignment; never wrap-and-reflow silently. */
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    tab-size: 4;
+}

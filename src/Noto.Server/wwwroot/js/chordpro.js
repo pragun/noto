@@ -115,10 +115,20 @@ const _state = new Map();
 //   {column_break} {colb} {cb}   start the next column
 //   {new_page} {np} {page_break} start the next page when printing
 //   {hr} {rule}                  horizontal line
+//   {line_gap: N} {gap: N}       N blank lines of vertical space
 //
-// Three or more consecutive newlines become vertical space — one blank line's
-// worth per extra newline — so deliberate spacing in the source survives.
-const _SEPARATOR_RE = /^[ \t]*\{(column_break|colb|cb|new_page|np|page_break|hr|rule)\}[ \t]*$|\n{3,}/gim;
+// Note that gaps are *space*, not pagination: they only push content onto the
+// next page if the page actually overflows. To put a section on a fresh page
+// regardless, use {np}.
+//
+// Runs of three or more newlines also become space, one blank line per extra
+// newline, so deliberate spacing in the source survives.
+const _SEPARATOR_RE = /^[ \t]*\{(column_break|colb|cb|new_page|np|page_break|hr|rule)\}[ \t]*$|^[ \t]*\{(?:line_gap|gap):[ \t]*(\d+(?:\.\d+)?)\}[ \t]*$|\n{3,}/gim;
+
+function _gapHtml(lines) {
+    const n = Math.max(0, Math.min(parseFloat(lines) || 0, 40));
+    return '<div class="cp-spacer" style="height:' + (n * 1.8) + 'em"></div>';
+}
 
 function _separatorHtml(token) {
     const name = (token || '').toLowerCase();
@@ -137,9 +147,11 @@ notoChordPro.splitLayout = function(source) {
         if (m.index > last) parts.push({ text: source.slice(last, m.index) });
         if (m[1]) {
             parts.push({ sep: _separatorHtml(m[1]) });
+        } else if (m[2] !== undefined) {
+            parts.push({ sep: _gapHtml(m[2]) });
         } else {
             const extra = Math.min(m[0].length - 2, 8);
-            parts.push({ sep: '<div class="cp-spacer" style="height:' + (extra * 0.9) + 'em"></div>' });
+            parts.push({ sep: _gapHtml(extra * 0.5) });
         }
         last = m.index + m[0].length;
         if (_SEPARATOR_RE.lastIndex === m.index) _SEPARATOR_RE.lastIndex++;

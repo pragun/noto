@@ -50,7 +50,7 @@ else
         <div class="quick-capture" style="margin-bottom:16px;">
             <input type="text" @bind="editTitle" placeholder="title"
                    style="width:100%; background:transparent; border:none; border-bottom:1px solid var(--chalk); font-family:inherit; font-size:14px; color:var(--charcoal); padding:6px 0; outline:none; margin-bottom:10px;" />
-            <textarea @bind="editBody" rows="8" style="width:100%; background:transparent; border:none; font-family:inherit; font-size:13px; color:var(--charcoal); outline:none; line-height:1.8; resize:vertical;"></textarea>
+            <textarea @bind="editBody" class="entity-edit-body" rows="24"></textarea>
             <div class="quick-capture-actions">
                 <button class="btn-zen" @onclick="CancelEdit">cancel</button>
                 <button class="btn-zen primary" @onclick="SaveEdit">save</button>
