@@ -1,0 +1,65 @@
+name: noto
+
+# noto behind WireGuard on a public VPS.
+#
+# Differs from docker-compose.prod.yml (the LXD/tailnet variant):
+#   - no traefik and no TLS yet. There is no tailnet here and no domain, so
+#     there is nothing to get a trusted certificate from. The app is published
+#     on the WireGuard address over plain HTTP, which is fine in a browser on a
+#     peer but is NOT enough for the iOS PWA: service workers and getUserMedia
+#     both require a secure context. Adding a domain + Let's Encrypt DNS-01 is
+#     the follow-up that makes the phone work.
+#   - the embedding endpoint is the Mac's WireGuard address, not a tailnet name.
+#
+# Ports bind to ${WG_ADDR} rather than 0.0.0.0 on purpose. Docker publishes via
+# DNAT/FORWARD and never traverses the INPUT chain, so host firewall rules do
+# not protect published ports — binding to the tunnel interface does. The Linode
+# Cloud Firewall (inbound DROP except UDP 51820) is the outer boundary.
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: noto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: noto
+      POSTGRES_DB: noto
+      # Single tenant, loopback-bound, reachable only through the tunnel.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - ${NOTO_DATA:-/srv/noto-data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noto"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  app:
+    build:
+      context: ..
+      dockerfile: src/Noto.Server/Dockerfile
+    image: noto-app:latest
+    container_name: noto-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Noto: "Host=db;Port=5432;Database=noto;Username=noto"
+      Storage__MediaRoot: /data/media
+
+      # Ollama runs on the Mac, reached over WireGuard. When the Mac is asleep
+      # the worker fails and retries; the backlog shows on /admin and drains
+      # the next time the tunnel is up.
+      Embeddings__Endpoint: ${EMBEDDINGS_ENDPOINT:?set EMBEDDINGS_ENDPOINT in .env}
+      Embeddings__RunWorker: "true"
+
+      OpenRouter__ApiKey: ${OPENROUTER_KEY:-}
+      Whisper__ApiKey: ${OPENAI_KEY:-}
+    volumes:
+      - ${NOTO_DATA:-/srv/noto-data}/media:/data/media
+    ports:
+      - "${WG_ADDR:?set WG_ADDR in .env}:80:5100"
