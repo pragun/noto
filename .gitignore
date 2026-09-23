@@ -47,3 +47,7 @@ deploy/.ts-authkey
 
 # Ansible secrets for the noto deployment
 deploy/ansible/secrets.yml
+
+# Symlink to a local ChatGPT export used for one-off analysis. The target holds
+# a live API key and ~35MB of conversation JSON; neither belongs in this repo.
+/origin
