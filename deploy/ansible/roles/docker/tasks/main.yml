@@ -1,0 +1,45 @@
+---
+- name: Install prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, gnupg, rsync]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Add Docker's apt repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: https://download.docker.com/linux/ubuntu
+    suites: ["{{ ansible_distribution_release }}"]
+    components: [stable]
+    architectures: ["{{ ansible_architecture | replace('x86_64','amd64') | replace('aarch64','arm64') }}"]
+    signed_by: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Install Docker
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Docker running and enabled at boot
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+# No ufw. Docker publishes ports via DNAT/FORWARD and never traverses INPUT,
+# so host firewall rules would not protect published ports anyway — the Linode
+# Cloud Firewall is the real boundary, and compose binds ports to the tunnel
+# address rather than 0.0.0.0.
+- name: Ensure ufw is absent
+  ansible.builtin.apt:
+    name: ufw
+    state: absent
+    purge: true

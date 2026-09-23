@@ -1,0 +1,24 @@
+---
+# Topology
+wg_subnet: "10.77.0"
+wg_port: 51820
+wg_server_public_ip: "69.164.221.49"
+wg_peers:
+  # The Mac also runs Tailscale for work, so its config deliberately carries no
+  # DNS line: setting one would override MagicDNS system-wide.
+  - name: mac
+    address: "10.77.0.2"
+  - name: phone
+    address: "10.77.0.3"
+
+# Where noto's state lives on the host. Two sources of truth that must be
+# backed up together: the postgres volume and the media tree.
+noto_data: /srv/noto-data
+noto_dir: /opt/noto
+noto_compose: docker-compose.wg.yml
+
+# Ollama runs on the Mac, reached back down the tunnel.
+embeddings_endpoint: "http://10.77.0.2:11434/v1/embeddings"
+
+noto_hostname: noto.zozo-pepe.cc
+acme_email: pragun.goyal@gmail.com

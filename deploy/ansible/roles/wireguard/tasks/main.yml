@@ -1,0 +1,104 @@
+---
+- name: Install WireGuard
+  ansible.builtin.apt:
+    name: [wireguard, wireguard-tools, qrencode]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Key directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - /etc/wireguard
+    - /etc/wireguard/peers
+
+# Keys are generated once and never regenerated: rotating the server key would
+# invalidate every peer, and rotating a peer key would silently break that
+# device until its config is replaced.
+- name: Generate the server private key
+  ansible.builtin.shell: 'umask 077 && wg genkey > /etc/wireguard/server.key'
+  args:
+    creates: /etc/wireguard/server.key
+
+- name: Derive the server public key
+  ansible.builtin.shell: 'wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub'
+  args:
+    creates: /etc/wireguard/server.pub
+
+- name: Generate peer private keys
+  ansible.builtin.shell: 'umask 077 && wg genkey > /etc/wireguard/peers/{{ item.name }}.key'
+  args:
+    creates: /etc/wireguard/peers/{{ item.name }}.key
+  loop: "{{ wg_peers }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: Derive peer public keys
+  ansible.builtin.shell: 'wg pubkey < /etc/wireguard/peers/{{ item.name }}.key > /etc/wireguard/peers/{{ item.name }}.pub'
+  args:
+    creates: /etc/wireguard/peers/{{ item.name }}.pub
+  loop: "{{ wg_peers }}"
+  loop_control: { label: "{{ item.name }}" }
+
+# A preshared key adds a symmetric layer on top of the DH handshake.
+- name: Generate peer preshared keys
+  ansible.builtin.shell: 'umask 077 && wg genpsk > /etc/wireguard/peers/{{ item.name }}.psk'
+  args:
+    creates: /etc/wireguard/peers/{{ item.name }}.psk
+  loop: "{{ wg_peers }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: Read key material
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  register: wg_key_files
+  loop: >-
+    {{ ['/etc/wireguard/server.key', '/etc/wireguard/server.pub']
+       + wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '/etc/wireguard/peers/\1.key') | list
+       + wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '/etc/wireguard/peers/\1.pub') | list
+       + wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '/etc/wireguard/peers/\1.psk') | list }}
+  loop_control: { label: "{{ item }}" }
+  no_log: true
+
+- name: Index key material by path
+  ansible.builtin.set_fact:
+    wg_keys: >-
+      {{ dict(wg_key_files.results
+              | map(attribute='item')
+              | zip(wg_key_files.results | map(attribute='content') | map('b64decode') | map('trim'))) }}
+  no_log: true
+
+- name: Server configuration
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: "0600"
+  notify: Restart wireguard
+
+- name: Peer configurations
+  ansible.builtin.template:
+    src: peer.conf.j2
+    dest: "/etc/wireguard/peers/{{ item.name }}.conf"
+    mode: "0600"
+  loop: "{{ wg_peers }}"
+  loop_control: { label: "{{ item.name }}" }
+
+# Rendered as a PNG rather than terminal ASCII: the config embeds a private key
+# and terminal output ends up in scrollback and logs.
+- name: QR codes for phone-style peers
+  ansible.builtin.shell: >-
+    qrencode -t png -o /etc/wireguard/peers/{{ item.name }}-qr.png
+    < /etc/wireguard/peers/{{ item.name }}.conf
+    && chmod 600 /etc/wireguard/peers/{{ item.name }}-qr.png
+  args:
+    creates: "/etc/wireguard/peers/{{ item.name }}-qr.png"
+  loop: "{{ wg_peers }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: WireGuard up and enabled at boot
+  ansible.builtin.systemd:
+    name: wg-quick@wg0
+    state: started
+    enabled: true

@@ -1,0 +1,17 @@
+# Managed by Ansible — edits here are overwritten.
+#
+# Peers reach noto at {{ wg_subnet }}.1 over this tunnel. Nothing else on this
+# box is reachable: the Linode Cloud Firewall drops all inbound except UDP
+# {{ wg_port }}, so this interface is the only door.
+[Interface]
+Address = {{ wg_subnet }}.1/24
+ListenPort = {{ wg_port }}
+PrivateKey = {{ wg_keys['/etc/wireguard/server.key'] }}
+{% for p in wg_peers %}
+
+[Peer]
+# {{ p.name }}
+PublicKey = {{ wg_keys['/etc/wireguard/peers/' ~ p.name ~ '.pub'] }}
+PresharedKey = {{ wg_keys['/etc/wireguard/peers/' ~ p.name ~ '.psk'] }}
+AllowedIPs = {{ p.address }}/32
+{% endfor %}

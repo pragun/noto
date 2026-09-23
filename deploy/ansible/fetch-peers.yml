@@ -1,0 +1,37 @@
+---
+# Pull the peer configs and phone QR down to the machine running this.
+# Separate from site.yml because it writes private keys to the local disk and
+# should be a deliberate act, not a side effect of every deploy.
+#
+#   ansible-playbook fetch-peers.yml
+- name: Fetch WireGuard peer configs
+  hosts: noto
+  gather_facts: false
+  vars:
+    dest_dir: "{{ lookup('env', 'HOME') }}/noto-wireguard"
+
+  tasks:
+    - name: Local directory
+      ansible.builtin.file:
+        path: "{{ dest_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+
+    - name: Fetch configs and QR codes
+      ansible.builtin.fetch:
+        src: "/etc/wireguard/peers/{{ item }}"
+        dest: "{{ dest_dir }}/{{ item }}"
+        flat: true
+      loop: >-
+        {{ wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '\1.conf') | list
+           + wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '\1-qr.png') | list }}
+
+    - name: Tighten local permissions
+      ansible.builtin.file:
+        path: "{{ dest_dir }}/{{ item }}"
+        mode: "0600"
+      delegate_to: localhost
+      loop: >-
+        {{ wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '\1.conf') | list
+           + wg_peers | map(attribute='name') | map('regex_replace', '^(.*)$', '\1-qr.png') | list }}

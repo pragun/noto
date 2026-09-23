@@ -1,0 +1,93 @@
+---
+- name: State directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ noto_dir }}", mode: "0755" }
+    - { path: "{{ noto_data }}/postgres", mode: "0700" }
+    - { path: "{{ noto_data }}/media", mode: "0755" }
+    # acme.json holds the private key for the TLS certificate.
+    - { path: "{{ noto_data }}/acme", mode: "0700" }
+  loop_control: { label: "{{ item.path }}" }
+
+# Tracked files only, from the checkout this play was run from — no bin/obj,
+# no .git, and no dependency on the host being able to reach GitHub. git archive
+# is deterministic for a given commit, so its checksum identifies the deployed
+# source and lets a no-change run stay green.
+- name: Archive the working tree locally
+  ansible.builtin.command:
+    cmd: git archive --format=tar -o {{ local_archive.path }} HEAD
+    chdir: "{{ playbook_dir }}/../.."
+  delegate_to: localhost
+  changed_when: false
+  check_mode: false
+
+- name: Checksum the archive
+  ansible.builtin.stat:
+    path: "{{ local_archive.path }}"
+    checksum_algorithm: sha256
+  register: archive_stat
+  delegate_to: localhost
+  check_mode: false
+
+- name: Read the currently deployed revision
+  ansible.builtin.slurp:
+    src: "{{ noto_dir }}/.deployed-sha"
+  register: deployed_sha
+  failed_when: false
+  changed_when: false
+
+- name: Decide whether the source needs redeploying
+  ansible.builtin.set_fact:
+    source_changed: >-
+      {{ (deployed_sha.content is not defined)
+         or (deployed_sha.content | b64decode | trim != archive_stat.stat.checksum) }}
+
+- name: Clear previously deployed source
+  ansible.builtin.file:
+    path: "{{ noto_dir }}/{{ item }}"
+    state: absent
+  loop: [src, deploy/traefik, noto.sln, Directory.Build.props]
+  when: source_changed
+
+- name: Unpack the source
+  ansible.builtin.unarchive:
+    src: "{{ local_archive.path }}"
+    dest: "{{ noto_dir }}"
+  when: source_changed
+
+- name: Record the deployed revision
+  ansible.builtin.copy:
+    content: "{{ archive_stat.stat.checksum }}\n"
+    dest: "{{ noto_dir }}/.deployed-sha"
+    mode: "0644"
+  when: source_changed
+
+- name: Render .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ noto_dir }}/deploy/.env"
+    mode: "0600"
+  no_log: true
+  register: noto_env
+
+# Only touch the running stack when something it depends on actually moved.
+- name: Build and start the stack
+  ansible.builtin.command:
+    cmd: docker compose -f {{ noto_compose }} up -d --build
+    chdir: "{{ noto_dir }}/deploy"
+  when: source_changed or noto_env.changed
+  changed_when: true
+
+- name: Wait for noto to answer through Traefik
+  ansible.builtin.uri:
+    url: "https://{{ noto_hostname }}/"
+    status_code: 200
+    validate_certs: true
+  register: noto_health
+  retries: 30
+  delay: 10
+  until: noto_health.status == 200
+  changed_when: false

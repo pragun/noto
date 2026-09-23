@@ -1,0 +1,69 @@
+---
+# Everything that was done to the Linode by hand, made repeatable.
+#
+#   ansible-playbook site.yml
+#
+# Requires the WireGuard tunnel to be up on the machine running it: the host's
+# public interface drops everything except UDP 51820, so 10.77.0.1 is the only
+# way to reach it. If the tunnel is down, use Lish (web console in Cloud
+# Manager; Lish-over-SSH needs a key registered on your Linode *profile*, which
+# is a different list from the instance's authorized_keys).
+#
+# NOT covered here: the Linode instance itself and its Cloud Firewall, which
+# live in the Linode API rather than on the host. See README.md for the CLI
+# calls that created them.
+- name: Configure the noto server
+  hosts: noto
+  gather_facts: true
+
+  vars_files:
+    - secrets.yml
+
+  pre_tasks:
+    - name: Fail early if secrets are unset
+      ansible.builtin.assert:
+        that:
+          - cf_dns_api_token | length > 0
+        fail_msg: >-
+          cf_dns_api_token is empty in secrets.yml. Traefik needs it for the
+          ACME DNS-01 challenge; without it there is no certificate, and
+          without a certificate iOS will not install the PWA.
+
+    # check_mode: false so --check still produces a path for the archive tasks
+    # to reference; it only creates an empty temp file locally.
+    - name: Stage a source archive
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .tar
+      register: local_archive
+      delegate_to: localhost
+      check_mode: false
+      changed_when: false
+
+  roles:
+    - docker
+    - wireguard
+    - noto
+
+  post_tasks:
+    # Restarting wg0 tears down the interface this play is running over, so the
+    # connection has to be given a chance to come back before anything else.
+    - name: Wait for the tunnel to come back
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: 120
+
+    - name: Remove the staged archive
+      ansible.builtin.file:
+        path: "{{ local_archive.path }}"
+        state: absent
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          - "noto:  https://{{ noto_hostname }}"
+          - "phone: https://{{ noto_hostname }}/m.html"
+          - "admin: https://{{ noto_hostname }}/admin"
+          - "Peer configs (private keys — fetch over scp, do not cat): /etc/wireguard/peers/"
