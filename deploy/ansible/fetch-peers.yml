@@ -8,7 +8,9 @@
   hosts: noto
   gather_facts: false
   vars:
-    dest_dir: "{{ lookup('env', 'HOME') }}/noto-wireguard"
+    # Gitignored, inside the repo so everything for this deployment lives
+    # together. Holds private keys — never track it.
+    dest_dir: "{{ playbook_dir }}/../.local"
 
   tasks:
     - name: Local directory

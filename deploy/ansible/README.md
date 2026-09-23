@@ -75,6 +75,20 @@ is actually serving port 53 on `10.77.0.1`. iOS applies a tunnel's DNS
 system-wide, so pointing it at a dead address breaks all name resolution on the
 device, not just noto. Carrier DNS resolves the record fine on its own.
 
+## Where local files live
+
+| path | what | tracked |
+|---|---|---|
+| `deploy/.local/` | peer configs (private keys), phone QR, server root password, Cloudflare token | no |
+| `deploy/ansible/secrets.yml` | tokens the playbook templates into `.env` | no |
+| `src/Noto.Server/appsettings.Local.json` | OpenRouter key for the dev stack | no |
+| `~/noto-data/` | dev stack state: postgres, media, ollama models | n/a |
+| `~/.config/linode-cli` | Linode API token | n/a |
+
+`deploy/.local/` is populated by `ansible-playbook fetch-peers.yml`, or by hand.
+Everything in it is a credential; the directory is gitignored as a whole rather
+than file by file, so a new file added there is ignored by default.
+
 ## Backups — still missing
 
 `{{ noto_data }}` is the only copy of anything captured since the migration, and

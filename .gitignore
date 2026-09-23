@@ -51,3 +51,8 @@ deploy/ansible/secrets.yml
 # Symlink to a local ChatGPT export used for one-off analysis. The target holds
 # a live API key and ~35MB of conversation JSON; neither belongs in this repo.
 /origin
+
+# Local operator material for the deployment: WireGuard peer configs (private
+# keys), the phone QR, the server root password, the Cloudflare token. Kept in
+# the repo for convenience, never tracked.
+/deploy/.local/
