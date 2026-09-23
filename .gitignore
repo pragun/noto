@@ -1,58 +1,75 @@
-# .NET
+# ─── Build output ───────────────────────────────────────────────────────────
 bin/
 obj/
 *.user
 *.suo
 .vs/
+.idea/
 
 # Node (for Milkdown build)
 node_modules/
 package-lock.json
 
-# Secrets
+# ─── Secrets ────────────────────────────────────────────────────────────────
+# Broad by design: it is cheaper to force-add something you meant to track than
+# to rewrite history after publishing a key.
 .env
+.env.*
+!.env.example
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
 
-# IDE
-.idea/
-*.swp
-*~
+# Key material of any kind, anywhere in the tree.
+*.key
+*.pem
+*.pfx
+*.p12
+*.psk
+*.ovpn
+id_rsa*
+id_ed25519*
 
-# OS
-.DS_Store
-Thumbs.db
+# Any secrets.yml, but keep the templates that document them.
+secrets.yml
+**/secrets.yml
+!secrets.example.yml
+!**/secrets.example.yml
 
-# Certs (generated locally)
-certs/
-
-# Reload sentinel file used by scripts/run.sh
-.reload
-
-# Data (never in repo)
-noto-data/
-
-# Origin data (symlink to chatgpt export, contains secrets)
-origin/
-
-# Generated audio demos
-src/Noto.Server/wwwroot/audio/*.aiff
-
-# EF migrations designer snapshot (auto-generated, can be large)
-# Keep migrations themselves
-
-# Tailscale auth key for deploy/provision.sh
+# Tailscale auth key read by deploy/provision.sh (LXD variant).
 deploy/.ts-authkey
 
-# Ansible secrets for the noto deployment
-deploy/ansible/secrets.yml
+# Operator material for the Linode deployment: WireGuard peer configs (private
+# keys), the phone QR, the server root password, the Cloudflare token. Ignored
+# as a whole directory so anything added later is ignored by default.
+/deploy/.local/
+
+# Locally generated dev certs.
+certs/
+
+# ─── Data ───────────────────────────────────────────────────────────────────
+# noto's state is never in the repo. Two sources of truth, both excluded:
+# the postgres volume and the media tree.
+noto-data/
+
+# Database + media exports produced by deploy/export-local.sh. These are the
+# whole archive in one file — never commit one.
+noto-export-*.tar
+*.dump
 
 # Symlink to a local ChatGPT export used for one-off analysis. The target holds
-# a live API key and ~35MB of conversation JSON; neither belongs in this repo.
+# a live API key and ~35MB of conversation JSON.
 /origin
 
-# Local operator material for the deployment: WireGuard peer configs (private
-# keys), the phone QR, the server root password, the Cloudflare token. Kept in
-# the repo for convenience, never tracked.
-/deploy/.local/
+# Generated audio demos.
+src/Noto.Server/wwwroot/audio/*.aiff
+
+# ─── Misc ───────────────────────────────────────────────────────────────────
+# Reload sentinel used by scripts/run.sh.
+.reload
+
+*.retry
+*.swp
+*~
+.DS_Store
+Thumbs.db
