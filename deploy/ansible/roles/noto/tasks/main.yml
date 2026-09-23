@@ -74,12 +74,27 @@
   register: noto_env
 
 # Only touch the running stack when something it depends on actually moved.
+#
+# Ansible buffers module output, so nothing appears here until the build
+# finishes — several minutes when the .NET layer is cold. Tee to a log so it
+# can be followed live from another terminal:
+#   ssh root@10.77.0.1 'tail -f /var/log/noto-deploy.log'
 - name: Build and start the stack
-  ansible.builtin.command:
-    cmd: docker compose -f {{ noto_compose }} up -d --build
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      docker compose -f {{ noto_compose }} up -d --build 2>&1
+      | tee /var/log/noto-deploy.log
     chdir: "{{ noto_dir }}/deploy"
+    executable: /bin/bash
   when: source_changed or noto_env.changed
   changed_when: true
+  register: compose_up
+
+- name: Show what the build did
+  ansible.builtin.debug:
+    var: compose_up.stdout_lines
+  when: compose_up.stdout_lines is defined
 
 - name: Wait for noto to answer through Traefik
   ansible.builtin.uri:
