@@ -2159,7 +2159,9 @@ body.entity-chord-sheet .main-content {
 
     /* Chord sheet print */
     .cp-controls, .render-toggle, .entity-id-only,
-    .zen-divider, hr, input[type=text], select { display: none !important; }
+    /* Decorative rules are chrome and go; {hr} in a chord sheet is content
+       the reader asked for, so it must survive onto paper. */
+    .zen-divider, hr:not(.cp-hr), input[type=text], select { display: none !important; }
     .chordpro-render {
         background: white !important;
         border: none !important;
@@ -2177,7 +2179,13 @@ body.entity-chord-sheet .main-content {
     /* Separators must survive print, where they matter most. */
     .cp-pagebreak { break-before: page; }
     .cp-colbreak { break-before: column; }
-    .cp-hr { border-top: 1px solid #999 !important; }
+    .cp-hr {
+        display: block !important;
+        border: 0 !important;
+        border-top: 1px solid #666 !important;
+        margin: 10pt 0 !important;
+        break-inside: avoid;
+    }
     .cp-diagram { width: 70px; }
     .cp-diagrams { padding: 6pt 0; margin-bottom: 10pt; }
 }
