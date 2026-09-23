@@ -3,12 +3,10 @@ name: noto
 # noto behind WireGuard on a public VPS.
 #
 # Differs from docker-compose.prod.yml (the LXD/tailnet variant):
-#   - no traefik and no TLS yet. There is no tailnet here and no domain, so
-#     there is nothing to get a trusted certificate from. The app is published
-#     on the WireGuard address over plain HTTP, which is fine in a browser on a
-#     peer but is NOT enough for the iOS PWA: service workers and getUserMedia
-#     both require a secure context. Adding a domain + Let's Encrypt DNS-01 is
-#     the follow-up that makes the phone work.
+#   - traefik terminates TLS with a Let's Encrypt certificate obtained via the
+#     DNS-01 challenge against Cloudflare. DNS-01 needs no inbound reachability,
+#     which is the only option here: the Linode firewall drops everything except
+#     WireGuard, so HTTP-01 can never complete.
 #   - the embedding endpoint is the Mac's WireGuard address, not a tailnet name.
 #
 # Ports bind to ${WG_ADDR} rather than 0.0.0.0 on purpose. Docker publishes via
@@ -17,6 +15,38 @@ name: noto
 # Cloud Firewall (inbound DROP except UDP 51820) is the outer boundary.
 
 services:
+  traefik:
+    image: traefik:v3.3
+    container_name: noto-traefik
+    restart: unless-stopped
+    command:
+      # File provider only — see traefik/dynamic-wg.yml for why there is no
+      # docker provider and no docker socket.
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?set ACME_EMAIL in .env}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      - --certificatesresolvers.le.acme.dnschallenge=true
+      - --certificatesresolvers.le.acme.dnschallenge.provider=cloudflare
+      # Check propagation against public resolvers: the host's own resolver may
+      # not see the TXT record promptly, and ours strips private answers anyway.
+      - --certificatesresolvers.le.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      - --log.level=INFO
+    environment:
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:?set CF_DNS_API_TOKEN in .env}
+    ports:
+      - "${WG_ADDR:?set WG_ADDR in .env}:80:80"
+      - "${WG_ADDR}:443:443"
+    volumes:
+      - ./traefik/dynamic-wg.yml:/etc/traefik/dynamic.yml:ro
+      - ${NOTO_DATA:-/srv/noto-data}/acme:/acme
+    depends_on:
+      - app
+
   db:
     image: pgvector/pgvector:pg17
     container_name: noto-db
@@ -61,5 +91,3 @@ services:
       Whisper__ApiKey: ${OPENAI_KEY:-}
     volumes:
       - ${NOTO_DATA:-/srv/noto-data}/media:/data/media
-    ports:
-      - "${WG_ADDR:?set WG_ADDR in .env}:80:5100"

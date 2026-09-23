@@ -1,0 +1,31 @@
+# Traefik dynamic config for the WireGuard/VPS deployment.
+#
+# Routing is declared here rather than through docker labels: Traefik's docker
+# provider negotiates an API version that Docker 28+ rejects ("client version
+# 1.24 is too old"), so labels are silently never read. The file provider also
+# means Traefik needs no docker socket, which is root-equivalent on the host.
+#
+# The certificate comes from Let's Encrypt via the DNS-01 challenge against
+# Cloudflare. DNS-01 needs no inbound reachability, which is essential here —
+# the Linode firewall drops everything except WireGuard, so HTTP-01 could never
+# complete.
+
+http:
+  routers:
+    noto:
+      rule: "Host(`noto.zozo-pepe.cc`)"
+      entryPoints:
+        - websecure
+      service: noto
+      tls:
+        certResolver: le
+  services:
+    noto:
+      loadBalancer:
+        servers:
+          - url: "http://app:5100"
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
