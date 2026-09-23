@@ -2035,6 +2035,33 @@ body.entity-chord-sheet .main-content {
 /* Multi-column layouts */
 .cp-cols-2 { column-count: 2; column-gap: 24px; column-rule: 1px solid var(--chalk); }
 .cp-cols-3 { column-count: 3; column-gap: 18px; column-rule: 1px solid var(--chalk); }
+
+/* ── Layout separators, emitted by chordpro.js ──────────────────────────────
+   {column_break} / {new_page} / {hr}, plus vertical space for runs of blank
+   lines in the source. break-* needs a zero-height block that the column and
+   page algorithms will still honour. */
+.cp-colbreak {
+    break-before: column;
+    -webkit-column-break-before: always;
+    height: 0;
+}
+.cp-pagebreak {
+    break-before: page;
+    height: 0;
+}
+/* In a single-column sheet a column break has nothing to break to, so fall
+   back to a page break — otherwise the directive silently does nothing. */
+.cp-body:not([class*="cp-cols-"]) .cp-colbreak,
+.cp-cols-1 .cp-colbreak {
+    break-before: page;
+}
+.cp-hr {
+    border: 0;
+    border-top: 1px solid var(--chalk);
+    margin: 14px 0;
+    break-inside: avoid;
+}
+.cp-spacer { break-inside: avoid; }
 /* Keep individual chord-over-lyric lines atomic (so the chord and its lyric
    never split across a page break), but let a long verse/chorus span pages
    when needed — avoids huge empty space at the bottom of a print page. */
@@ -2147,6 +2174,10 @@ body.entity-chord-sheet .main-content {
        glued to its lyric, not to the line above. */
     .cp-body .row + .row { margin-top: 0.7em; }
     .cp-body .chord { color: #444 !important; font-weight: 600; line-height: 1.1; }
+    /* Separators must survive print, where they matter most. */
+    .cp-pagebreak { break-before: page; }
+    .cp-colbreak { break-before: column; }
+    .cp-hr { border-top: 1px solid #999 !important; }
     .cp-diagram { width: 70px; }
     .cp-diagrams { padding: 6pt 0; margin-bottom: 10pt; }
 }

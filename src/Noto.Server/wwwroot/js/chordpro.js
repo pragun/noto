@@ -25,7 +25,8 @@ async function loadLibs() {
     return _libsLoaded;
 }
 
-// Parse {columns: N} and {column_break} from source. ChordSheetJS may not handle these natively.
+// Parse {columns: N} from source. ChordSheetJS does not handle it natively.
+// Layout separators ({column_break}, {new_page}, {hr}) are handled in renderBody.
 function extractLayoutDirectives(source) {
     const cols = source.match(/\{columns?:\s*(\d+)\}/i);
     const columnCount = cols ? parseInt(cols[1], 10) : 1;
@@ -104,6 +105,64 @@ function renderDiagram(container, name, definition) {
 
 // Per-target state: source + semitones
 const _state = new Map();
+
+// ── Layout separators ───────────────────────────────────────────────────────
+// ChordSheetJS has no concept of a column break, a page break or a rule, and it
+// discards runs of blank lines. Rather than guess at the formatter's markup and
+// post-process it, the source is split on these separators, each segment is
+// rendered independently, and the separator markup is emitted between them.
+//
+//   {column_break} {colb} {cb}   start the next column
+//   {new_page} {np} {page_break} start the next page when printing
+//   {hr} {rule}                  horizontal line
+//
+// Three or more consecutive newlines become vertical space — one blank line's
+// worth per extra newline — so deliberate spacing in the source survives.
+const _SEPARATOR_RE = /^[ \t]*\{(column_break|colb|cb|new_page|np|page_break|hr|rule)\}[ \t]*$|\n{3,}/gim;
+
+function _separatorHtml(token) {
+    const name = (token || '').toLowerCase();
+    if (name === 'hr' || name === 'rule') return '<hr class="cp-hr">';
+    if (name === 'new_page' || name === 'np' || name === 'page_break') return '<div class="cp-pagebreak"></div>';
+    return '<div class="cp-colbreak"></div>';
+}
+
+// Exported so the splitting logic can be unit tested without a DOM.
+notoChordPro.splitLayout = function(source) {
+    const parts = [];
+    let last = 0;
+    let m;
+    _SEPARATOR_RE.lastIndex = 0;
+    while ((m = _SEPARATOR_RE.exec(source)) !== null) {
+        if (m.index > last) parts.push({ text: source.slice(last, m.index) });
+        if (m[1]) {
+            parts.push({ sep: _separatorHtml(m[1]) });
+        } else {
+            const extra = Math.min(m[0].length - 2, 8);
+            parts.push({ sep: '<div class="cp-spacer" style="height:' + (extra * 0.9) + 'em"></div>' });
+        }
+        last = m.index + m[0].length;
+        if (_SEPARATOR_RE.lastIndex === m.index) _SEPARATOR_RE.lastIndex++;
+    }
+    if (last < source.length) parts.push({ text: source.slice(last) });
+    return parts;
+};
+
+notoChordPro.renderBody = function(source, parser, semitones) {
+    const formatter = new window.ChordSheetJS.HtmlDivFormatter();
+    const sem = (typeof semitones === 'number') ? semitones : 0;
+    return notoChordPro.splitLayout(source).map(function(part) {
+        if (part.sep !== undefined) return part.sep;
+        if (!part.text.trim()) return '';
+        let song = parser.parse(part.text);
+        if (sem !== 0) {
+            try {
+                if (typeof song.transpose === 'function') song = song.transpose(sem) || song;
+            } catch {}
+        }
+        return formatter.format(song);
+    }).join('');
+};
 
 notoChordPro.render = async function(targetSelector, source, semitones, fallbackTitle) {
     await loadLibs();
@@ -215,19 +274,8 @@ notoChordPro.render = async function(targetSelector, source, semitones, fallback
         const bodyOnlySource = cleanSource.replace(
             /^\{(title|t|subtitle|st|artist|composer|key|k|capo|tempo|time|meta):[^}]*\}\s*$/gm,
             ''
-        ).replace(/\n\n\n+/g, '\n\n');
-        const bodySong = parser.parse(bodyOnlySource);
-        let renderSong = bodySong;
-        const sem2 = (typeof semitones === 'number') ? semitones : 0;
-        if (sem2 !== 0) {
-            try {
-                if (typeof renderSong.transpose === 'function') {
-                    renderSong = renderSong.transpose(sem2) || renderSong;
-                }
-            } catch {}
-        }
-        const formatter = new window.ChordSheetJS.HtmlDivFormatter();
-        body = formatter.format(renderSong);
+        );
+        body = notoChordPro.renderBody(bodyOnlySource, parser, semitones);
     } catch (e) {
         body = '<pre>' + esc(cleanSource) + '</pre>';
     }
