@@ -160,8 +160,8 @@
 
         <!-- seed: a fragment belongs to a song, and that song may not exist yet. -->
         <div id="fields-seed" class="cap-section hidden">
-            <div class="field-label">song</div>
-            <input type="text" id="seed-search" class="title-input" placeholder="search songs, or type a new name" oninput="renderThreads()">
+            <div class="field-label">song — pick one, or name a new one</div>
+            <input type="text" id="seed-search" class="title-input" placeholder="search your songs..." oninput="renderThreads()">
             <div id="thread-list" class="thread-list"></div>
             <div class="field-label">form</div>
             <div class="chip-row" id="seed-form">
@@ -395,7 +395,12 @@ function timeAgo(iso) {
 function renderThreads() {
     var q = (document.getElementById('seed-search').value || '').trim().toLowerCase();
     var list = document.getElementById('thread-list');
+    // Songs only. Themes are a different kind of thread — offering "Grief,
+    // Tears, and What Was Starved" as a song to attach a lyric to is worse
+    // than offering nothing, because it makes the picker look like it creates
+    // threads rather than joining one.
     var matches = threads.filter(function(t) {
+        if (t.kind !== 'song') return false;
         return !q || (t.title || '').toLowerCase().includes(q);
     });
 
@@ -413,7 +418,10 @@ function renderThreads() {
         html += '<div class="thread-item' + (on ? ' on' : '') + '" onclick="toggleNewThread()">'
             + '<span class="dot"></span><span>+ new: ' + esc(document.getElementById('seed-search').value.trim()) + '</span></div>';
     }
-    list.innerHTML = html || '<div class="thread-item" style="color:var(--slate);">no songs yet — type a name to start one</div>';
+    list.innerHTML = html || '<div class="thread-item" style="color:var(--slate);">'
+        + (q ? 'no song by that name — tap above to start it'
+             : 'no songs yet — type a name to start one')
+        + '</div>';
 }
 
 function toggleThread(id) {
