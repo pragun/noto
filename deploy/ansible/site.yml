@@ -43,6 +43,7 @@
   roles:
     - docker
     - wireguard
+    - dns
     - noto
 
   post_tasks:

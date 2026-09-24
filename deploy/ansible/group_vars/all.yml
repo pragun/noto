@@ -3,13 +3,23 @@
 wg_subnet: "10.77.0"
 wg_port: 51820
 wg_server_public_ip: "69.164.221.49"
+# dns: true adds a DNS line to that peer's config, pointing at dnsmasq on the
+# server. Only for peers whose network mangles the answer for noto_hostname.
 wg_peers:
-  # The Mac also runs Tailscale for work, so its config deliberately carries no
-  # DNS line: setting one would override MagicDNS system-wide.
+  # The Mac must NOT set dns: it also runs Tailscale for work, and a tunnel DNS
+  # line overrides MagicDNS system-wide.
   - name: mac
     address: "10.77.0.2"
+    dns: false
+  # iOS applies a tunnel's DNS to the whole device, which is exactly what is
+  # wanted here: a home router that strips the private answer is bypassed.
   - name: phone
     address: "10.77.0.3"
+    dns: true
+
+dns_upstreams:
+  - 1.1.1.1
+  - 9.9.9.9
 
 # Where noto's state lives on the host. Two sources of truth that must be
 # backed up together: the postgres volume and the media tree.

@@ -1,0 +1,23 @@
+---
+- name: Install dnsmasq
+  ansible.builtin.apt:
+    name: dnsmasq
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# systemd-resolved keeps 127.0.0.53; dnsmasq takes the tunnel address only, so
+# the two do not contend for port 53.
+- name: Configure the tunnel resolver
+  ansible.builtin.template:
+    src: noto.conf.j2
+    dest: /etc/dnsmasq.d/noto.conf
+    mode: "0644"
+    validate: dnsmasq --test --conf-file=%s
+  notify: Restart dnsmasq
+
+- name: dnsmasq running and enabled
+  ansible.builtin.systemd:
+    name: dnsmasq
+    state: started
+    enabled: true

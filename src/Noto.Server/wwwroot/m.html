@@ -71,6 +71,37 @@
 
         /* Queue */
         .queue-panel { padding:16px 20px; }
+
+        /* Mode tabs — note / rec / seed. Each mode reveals only its own fields;
+           the stored entity is the same shape either way. */
+        .mode-tabs { display:flex; gap:6px; padding:8px 20px 0; }
+        .mode-tab {
+            flex:1; padding:7px 0; font-family:inherit; font-size:10px; letter-spacing:0.08em;
+            background:transparent; border:1px solid var(--chalk); color:var(--slate); cursor:pointer;
+        }
+        .mode-tab.active { background:var(--charcoal); color:var(--parchment); border-color:var(--charcoal); }
+        .field-label { font-size:9px; letter-spacing:0.1em; color:var(--slate); margin:10px 0 4px; }
+        .chip-row { display:flex; flex-wrap:wrap; gap:6px; }
+        .chip {
+            padding:6px 11px; font-family:inherit; font-size:11px; cursor:pointer;
+            background:rgba(255,255,255,0.55); border:1px solid var(--chalk); color:var(--charcoal);
+        }
+        .chip.on { background:var(--matcha); color:#fff; border-color:var(--matcha); }
+        .recent-row { font-size:9px; color:var(--slate); margin-top:5px; }
+        .recent-row span { cursor:pointer; text-decoration:underline; margin-right:8px; }
+        /* Thread picker: one thread per song means a growing list, so it
+           searches rather than being a dropdown. */
+        .thread-list { max-height:150px; overflow-y:auto; border:1px solid var(--chalk); background:rgba(255,255,255,0.45); }
+        .thread-item { padding:8px 10px; font-size:11px; display:flex; gap:8px; align-items:center; cursor:pointer; border-bottom:1px solid rgba(218,212,200,0.5); }
+        .thread-item:last-child { border-bottom:none; }
+        .thread-item.on { background:rgba(122,158,126,0.18); }
+        .thread-item .dot { width:7px; height:7px; border-radius:50%; border:1px solid var(--slate); flex:none; }
+        .thread-item.on .dot { background:var(--matcha); border-color:var(--matcha); }
+        .thread-item .when { margin-left:auto; font-size:9px; color:var(--slate); }
+        .group-head { font-size:10px; letter-spacing:0.12em; color:var(--charcoal); margin:16px 0 6px; display:flex; }
+        .group-head .n { margin-left:auto; color:var(--slate); }
+        .rec-row { padding:6px 0 6px 10px; font-size:11px; border-left:1px solid var(--chalk); display:flex; gap:6px; }
+        .rec-row .meta { margin-left:auto; font-size:9px; color:var(--slate); }
         .q-item { background:rgba(255,255,255,0.55); border:1px solid var(--chalk); border-left:3px solid var(--amber); padding:10px 12px; margin-bottom:8px; }
         .q-type { font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:var(--amber); }
         .q-text { font-size:11px; color:var(--charcoal); line-height:1.5; margin:4px 0; max-height:40px; overflow:hidden; }
@@ -97,6 +128,7 @@
 
 <div class="view-tabs">
     <button class="view-tab active" onclick="showView('capture')">capture</button>
+    <button class="view-tab" onclick="showView('recs')">recs</button>
     <button class="view-tab" onclick="showView('queue')">queue</button>
 </div>
 
@@ -104,15 +136,49 @@
 
 <!-- ── CAPTURE VIEW ── -->
 <div id="view-capture" class="view active">
+    <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="note" onclick="setMode('note')">note</button>
+        <button class="mode-tab" data-mode="rec" onclick="setMode('rec')">rec</button>
+        <button class="mode-tab" data-mode="seed" onclick="setMode('seed')">seed</button>
+    </div>
     <div class="cap-form">
+        <!-- rec: who recommended what, and what kind of thing. Stored as fields
+             so the browse screen can regroup by person / kind / date. -->
+        <div id="fields-rec" class="cap-section hidden">
+            <div class="field-label">from</div>
+            <input type="text" id="rec-from" class="title-input" placeholder="who recommended it" oninput="checkSubmit()">
+            <div id="rec-recent" class="recent-row"></div>
+            <div class="field-label">kind</div>
+            <div class="chip-row" id="rec-kind">
+                <button class="chip" onclick="pickChip(this,'rec-kind')" data-v="book">book</button>
+                <button class="chip" onclick="pickChip(this,'rec-kind')" data-v="film">film</button>
+                <button class="chip" onclick="pickChip(this,'rec-kind')" data-v="music">music</button>
+                <button class="chip" onclick="pickChip(this,'rec-kind')" data-v="place">place</button>
+                <button class="chip" onclick="pickChip(this,'rec-kind')" data-v="other">other</button>
+            </div>
+        </div>
+
+        <!-- seed: a fragment belongs to a song, and that song may not exist yet. -->
+        <div id="fields-seed" class="cap-section hidden">
+            <div class="field-label">song</div>
+            <input type="text" id="seed-search" class="title-input" placeholder="search songs, or type a new name" oninput="renderThreads()">
+            <div id="thread-list" class="thread-list"></div>
+            <div class="field-label">form</div>
+            <div class="chip-row" id="seed-form">
+                <button class="chip" onclick="pickChip(this,'seed-form')" data-v="lyric">lyric</button>
+                <button class="chip" onclick="pickChip(this,'seed-form')" data-v="melody">melody</button>
+                <button class="chip" onclick="pickChip(this,'seed-form')" data-v="fragment">fragment</button>
+            </div>
+        </div>
+
         <div class="cap-section">
-            <div style="margin-bottom:6px;">
+            <div id="tpl-wrap" style="margin-bottom:6px;">
                 <select id="tpl-select" onchange="applyTemplate(this)" style="background:rgba(255,255,255,0.55); border:1px solid var(--chalk); font-family:inherit; font-size:10px; color:var(--charcoal); padding:3px 6px; outline:none;">
                     <option value="">template...</option>
                 </select>
             </div>
             <textarea id="cap-body" placeholder="what's on your mind..." oninput="checkSubmit()"></textarea>
-            <input type="text" id="cap-title" class="title-input" placeholder="title (optional)" style="margin-top:8px;">
+            <input type="text" id="cap-title" class="title-input" placeholder="title (optional)" style="margin-top:8px;" oninput="checkSubmit()">
         </div>
 
         <div class="add-btns">
@@ -155,6 +221,20 @@
     </div>
 </div>
 
+<!-- ── RECS VIEW ──
+     Same rows, three lenses — only possible because from/kind are fields
+     rather than folder names. -->
+<div id="view-recs" class="view">
+    <div class="queue-panel">
+        <div class="chip-row" style="margin-bottom:4px;">
+            <button class="chip on" onclick="setRecGroup(this,'from')">by person</button>
+            <button class="chip" onclick="setRecGroup(this,'kind')">by kind</button>
+            <button class="chip" onclick="setRecGroup(this,'date')">by date</button>
+        </div>
+        <div id="recs-body"></div>
+    </div>
+</div>
+
 <!-- ── QUEUE VIEW ── -->
 <div id="view-queue" class="view">
     <div class="queue-panel">
@@ -172,6 +252,12 @@
 <script>
 // ── State ──
 var offlineMode = false;
+var captureMode = 'note';      // note | rec | seed
+var threads = [];              // cached from /api/threads, refreshed on load
+var selectedThreads = [];      // thread ids to tag this capture into
+var newThreadName = null;      // a song being started that does not exist yet
+var recentPeople = [];         // learned from what you have already typed
+var recGroup = 'from';
 var queue = []; // loaded from IndexedDB on init
 var attachments = [];
 var editingIdx = -1;
@@ -253,6 +339,111 @@ function toggleMode() {
     b.className = 'mode-btn ' + (offlineMode ? 'offline' : 'online');
 }
 
+// ── Capture modes ──
+// The three modes write the same entity shape; they differ only in which
+// fields are on screen and what lands in meta.
+function setMode(mode) {
+    captureMode = mode;
+    document.querySelectorAll('.mode-tab').forEach(function(t) {
+        t.classList.toggle('active', t.dataset.mode === mode);
+    });
+    document.getElementById('fields-rec').classList.toggle('hidden', mode !== 'rec');
+    document.getElementById('fields-seed').classList.toggle('hidden', mode !== 'seed');
+    // The template picker is noise in the structured modes.
+    document.getElementById('tpl-wrap').classList.toggle('hidden', mode !== 'note');
+
+    var body = document.getElementById('cap-body');
+    var title = document.getElementById('cap-title');
+    if (mode === 'rec') {
+        title.placeholder = 'what — the book, film, record, place';
+        body.placeholder = 'why / context — what did they say about it?';
+    } else if (mode === 'seed') {
+        title.placeholder = 'title (optional)';
+        body.placeholder = 'the line, the image, the idea...';
+    } else {
+        title.placeholder = 'title (optional)';
+        body.placeholder = "what's on your mind...";
+    }
+    if (mode === 'seed') renderThreads();
+    if (mode === 'rec') renderRecentPeople();
+    checkSubmit();
+}
+
+// Single-select chip groups (kind, form).
+function pickChip(el, groupId) {
+    var group = document.getElementById(groupId);
+    var wasOn = el.classList.contains('on');
+    group.querySelectorAll('.chip').forEach(function(c) { c.classList.remove('on'); });
+    if (!wasOn) el.classList.add('on');
+    checkSubmit();
+}
+function chipValue(groupId) {
+    var on = document.querySelector('#' + groupId + ' .chip.on');
+    return on ? on.dataset.v : null;
+}
+
+// ── Threads ──
+function timeAgo(iso) {
+    if (!iso) return '';
+    var d = (Date.now() - new Date(iso).getTime()) / 86400000;
+    if (d < 1) return 'today';
+    if (d < 2) return '1d';
+    if (d < 31) return Math.floor(d) + 'd';
+    return Math.floor(d / 30) + 'mo';
+}
+
+function renderThreads() {
+    var q = (document.getElementById('seed-search').value || '').trim().toLowerCase();
+    var list = document.getElementById('thread-list');
+    var matches = threads.filter(function(t) {
+        return !q || (t.title || '').toLowerCase().includes(q);
+    });
+
+    var html = matches.map(function(t) {
+        var on = selectedThreads.indexOf(t.id) >= 0;
+        return '<div class="thread-item' + (on ? ' on' : '') + '" onclick="toggleThread(\'' + t.id + '\')">'
+            + '<span class="dot"></span><span>' + esc(t.title || 'untitled') + '</span>'
+            + '<span class="when">' + timeAgo(t.lastAt) + '</span></div>';
+    }).join('');
+
+    // Typing a name that matches nothing offers to start it — a song can begin
+    // on a hillside without a trip to the desktop.
+    if (q && !matches.some(function(t) { return (t.title || '').toLowerCase() === q; })) {
+        var on = newThreadName !== null;
+        html += '<div class="thread-item' + (on ? ' on' : '') + '" onclick="toggleNewThread()">'
+            + '<span class="dot"></span><span>+ new: ' + esc(document.getElementById('seed-search').value.trim()) + '</span></div>';
+    }
+    list.innerHTML = html || '<div class="thread-item" style="color:var(--slate);">no songs yet — type a name to start one</div>';
+}
+
+function toggleThread(id) {
+    var i = selectedThreads.indexOf(id);
+    if (i >= 0) selectedThreads.splice(i, 1); else selectedThreads.push(id);
+    renderThreads();
+    checkSubmit();
+}
+
+function toggleNewThread() {
+    var name = document.getElementById('seed-search').value.trim();
+    newThreadName = (newThreadName === null && name) ? name : null;
+    renderThreads();
+    checkSubmit();
+}
+
+function renderRecentPeople() {
+    var el = document.getElementById('rec-recent');
+    if (!el) return;
+    el.innerHTML = recentPeople.length
+        ? 'recent: ' + recentPeople.slice(0, 6).map(function(p) {
+            return '<span onclick="setPerson(\'' + esc(p).replace(/'/g, "\\'") + '\')">' + esc(p) + '</span>';
+          }).join('')
+        : '';
+}
+function setPerson(p) {
+    document.getElementById('rec-from').value = p;
+    checkSubmit();
+}
+
 // ── Views ──
 function showView(name) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -261,6 +452,7 @@ function showView(name) {
     var tab = document.querySelector('.view-tab[onclick*="' + name + '"]');
     if (tab) tab.classList.add('active');
     if (name === 'queue') renderQueue();
+    if (name === 'recs') loadRecs();
 }
 
 function showErr(msg) {
@@ -314,8 +506,12 @@ function renderAttachments() {
 
 function checkSubmit() {
     var hasText = document.getElementById('cap-body').value.trim().length > 0;
+    var hasTitle = document.getElementById('cap-title').value.trim().length > 0;
     var hasAtt = attachments.length > 0;
-    document.getElementById('cap-submit').disabled = !(hasText || hasAtt);
+    // In rec mode the title *is* the thing being recommended, so it alone is
+    // enough — you can note "Stoner, from Rachel" without writing a review.
+    var ok = (captureMode === 'rec') ? (hasTitle || hasText) : (hasText || hasTitle || hasAtt);
+    document.getElementById('cap-submit').disabled = !ok;
 }
 
 // ── Recording ──
@@ -371,6 +567,12 @@ async function submitCapture() {
     var title = document.getElementById('cap-title').value.trim();
 
     var captureData = {
+        mode: captureMode,
+        from: captureMode === 'rec' ? (document.getElementById('rec-from').value.trim() || null) : null,
+        kind: captureMode === 'rec' ? chipValue('rec-kind') : null,
+        form: captureMode === 'seed' ? chipValue('seed-form') : null,
+        threads: selectedThreads.slice(),
+        newThread: captureMode === 'seed' ? newThreadName : null,
         body: body || null,
         title: title || null,
         photos: attachments.filter(a => a.type==='photo').map(a => ({ blob:a.blob, mime:a.mime, name:a.name, thumb:a.thumb })),
@@ -422,6 +624,12 @@ function showSuccess(queued, id) {
 function resetForm() {
     document.getElementById('cap-body').value = '';
     document.getElementById('cap-title').value = '';
+    var rf = document.getElementById('rec-from'); if (rf) rf.value = '';
+    var ss = document.getElementById('seed-search'); if (ss) ss.value = '';
+    document.querySelectorAll('.chip-row .chip.on').forEach(function(c) { c.classList.remove('on'); });
+    selectedThreads = [];
+    newThreadName = null;
+    if (captureMode === 'seed') renderThreads();
     attachments.forEach(a => { if (a.blobUrl) URL.revokeObjectURL(a.blobUrl); });
     attachments = [];
     renderAttachments();
@@ -583,6 +791,14 @@ function buildFormForItem(d) {
     var f = new FormData();
     if (d.body) f.append('body', d.body);
     if (d.title) f.append('title', d.title);
+    if (d.mode && d.mode !== 'note') f.append('mode', d.mode);
+    if (d.from) f.append('from', d.from);
+    if (d.kind) f.append('kind', d.kind);
+    if (d.form) f.append('form', d.form);
+    // Thread ids and a pending new-thread name ride along with the queued item,
+    // so a note captured offline still lands in the right song after sync.
+    if (d.threads && d.threads.length) f.append('threads', d.threads.join(','));
+    if (d.newThread) { f.append('new_thread', d.newThread); f.append('new_thread_kind', 'song'); }
     for (var p of (d.photos||[])) f.append('file', p.blob, p.name || 'photo.jpg');
     for (var a of (d.audios||[])) f.append('file', a.blob, 'recording' + (a.ext||'.webm'));
     return f;
@@ -616,6 +832,60 @@ async function syncQueue() {
     else { showErr(''); renderQueue(); }
 }
 
+// ── Recs ──
+// Grouping happens client side over the same flat list: person, medium and
+// date are three lenses, not three storage layouts.
+var recsCache = null;
+
+function setRecGroup(el, g) {
+    recGroup = g;
+    document.querySelectorAll('#view-recs .chip').forEach(function(c) { c.classList.remove('on'); });
+    el.classList.add('on');
+    renderRecs();
+}
+
+async function loadRecs() {
+    try {
+        var r = await fetch('/api/recs');
+        recsCache = await r.json();
+    } catch (e) {
+        recsCache = null;
+    }
+    renderRecs();
+}
+
+var KIND_ICON = { book:'▤', film:'▶', music:'♪', place:'⌖', other:'·' };
+
+function renderRecs() {
+    var el = document.getElementById('recs-body');
+    if (recsCache === null) { el.innerHTML = '<div class="empty-msg">offline — recs need the server</div>'; return; }
+    if (!recsCache.length) { el.innerHTML = '<div class="empty-msg">no recs yet</div>'; return; }
+
+    var groups = {};
+    recsCache.forEach(function(r) {
+        var key;
+        if (recGroup === 'from') key = r.from || 'unattributed';
+        else if (recGroup === 'kind') key = r.kind || 'other';
+        else key = new Date(r.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'long' });
+        (groups[key] = groups[key] || []).push(r);
+    });
+
+    var keys = Object.keys(groups);
+    // Date groups read newest-first; the others biggest-first.
+    if (recGroup === 'date') keys.sort(function(a,b) { return new Date(groups[b][0].createdAt) - new Date(groups[a][0].createdAt); });
+    else keys.sort(function(a,b) { return groups[b].length - groups[a].length; });
+
+    el.innerHTML = keys.map(function(k) {
+        var rows = groups[k].map(function(r) {
+            var icon = KIND_ICON[r.kind] || '·';
+            var aside = recGroup === 'from' ? (r.kind || '') : (r.from || '');
+            return '<div class="rec-row"><span>' + icon + '</span><span>' + esc(r.title || r.body || 'untitled') + '</span>'
+                + (aside ? '<span class="meta">' + esc(aside) + '</span>' : '') + '</div>';
+        }).join('');
+        return '<div class="group-head"><span>' + esc(k.toUpperCase()) + '</span><span class="n">' + groups[k].length + '</span></div>' + rows;
+    }).join('');
+}
+
 // ── Init ──
 (async function() {
     try {
@@ -637,6 +907,39 @@ async function syncQueue() {
 })();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw-capture.js').catch(function(){});
+
+// Threads for the seed picker. Cached in localStorage so the picker still
+// works on a walk with no signal — a stale list beats an empty one.
+async function loadThreads() {
+    try {
+        var r = await fetch('/api/threads');
+        threads = await r.json();
+        try { localStorage.setItem('noto-threads', JSON.stringify(threads)); } catch(e) {}
+    } catch (e) {
+        try { threads = JSON.parse(localStorage.getItem('noto-threads') || '[]'); } catch(e2) { threads = []; }
+    }
+    if (captureMode === 'seed') renderThreads();
+}
+
+// Who you have credited before, newest first. Learned rather than configured.
+async function loadRecentPeople() {
+    try {
+        var r = await fetch('/api/recs');
+        var recs = await r.json();
+        var seen = [];
+        recs.forEach(function(x) {
+            if (x.from && seen.indexOf(x.from) < 0) seen.push(x.from);
+        });
+        recentPeople = seen;
+        try { localStorage.setItem('noto-people', JSON.stringify(seen)); } catch(e) {}
+    } catch (e) {
+        try { recentPeople = JSON.parse(localStorage.getItem('noto-people') || '[]'); } catch(e2) { recentPeople = []; }
+    }
+    if (captureMode === 'rec') renderRecentPeople();
+}
+
+loadThreads();
+loadRecentPeople();
 
 // Load templates
 var templateCache = [];

@@ -1,0 +1,25 @@
+# Managed by Ansible.
+#
+# A resolver for tunnel peers only. Needed because some networks (a home router
+# you don't control, a company resolver) apply DNS rebinding protection and
+# strip the RFC1918 answer for {{ noto_hostname }}. Asking a resolver inside the
+# tunnel sidesteps every middlebox on the way.
+#
+# Bound to the WireGuard address alone — never the public interface. The Linode
+# firewall already drops inbound DNS, but an open resolver is worth refusing
+# twice.
+interface=wg0
+bind-interfaces
+listen-address={{ wg_subnet }}.1
+
+# Answer for noto ourselves; everything else goes upstream unchanged, so a peer
+# using this resolver still browses the rest of the internet normally.
+address=/{{ noto_hostname }}/{{ wg_subnet }}.1
+
+no-resolv
+{% for s in dns_upstreams %}
+server={{ s }}
+{% endfor %}
+
+domain-needed
+cache-size=1000

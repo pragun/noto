@@ -7,6 +7,19 @@ namespace Noto.Server.Api;
 
 public static class CaptureEndpoints
 {
+    // meta is free-form JSON; read a string field defensively.
+    private static string? MetaString(JsonDocument? meta, string field)
+    {
+        if (meta == null) return null;
+        try
+        {
+            if (meta.RootElement.TryGetProperty(field, out var v) && v.ValueKind == JsonValueKind.String)
+                return v.GetString();
+        }
+        catch { }
+        return null;
+    }
+
     public static void MapCaptureApi(this WebApplication app)
     {
         var api = app.MapGroup("/api");
@@ -40,8 +53,41 @@ public static class CaptureEndpoints
             if (!hasText && !hasFiles)
                 return Results.BadRequest("nothing to capture");
 
+            // Structured capture fields. These live in meta rather than being
+            // encoded in thread names, so the same note can be viewed by person,
+            // by medium or by date — grouping is a view concern, not storage.
+            var mode = form["mode"].FirstOrDefault();
+            var recFrom = form["from"].FirstOrDefault();
+            var recKind = form["kind"].FirstOrDefault();
+            var seedForm = form["form"].FirstOrDefault();
+
+            JsonDocument? meta = null;
+            var metaFields = new Dictionary<string, string>();
+            if (!string.IsNullOrWhiteSpace(mode)) metaFields["mode"] = mode.Trim();
+            if (!string.IsNullOrWhiteSpace(recFrom)) metaFields["from"] = recFrom.Trim();
+            if (!string.IsNullOrWhiteSpace(recKind)) metaFields["kind"] = recKind.Trim();
+            if (!string.IsNullOrWhiteSpace(seedForm)) metaFields["form"] = seedForm.Trim();
+            if (metaFields.Count > 0)
+                meta = JsonDocument.Parse(JsonSerializer.Serialize(metaFields));
+
             // Create one entity
-            var entity = await svc.Create(EntityTypes.Capture, title?.Trim(), body?.Trim());
+            var entity = await svc.Create(EntityTypes.Capture, title?.Trim(), body?.Trim(), meta);
+
+            // Tag into existing threads, and optionally a brand new one. A note
+            // captured on a walk has to be able to start a song that does not
+            // exist yet without a round trip to the desktop.
+            foreach (var raw in form["threads"].ToString().Split(',', StringSplitOptions.RemoveEmptyEntries))
+                if (Guid.TryParse(raw.Trim(), out var threadId))
+                    await svc.TagCapture(entity.Id, threadId);
+
+            var newThread = form["new_thread"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(newThread))
+            {
+                var kindMeta = JsonDocument.Parse(JsonSerializer.Serialize(
+                    new Dictionary<string, string> { ["kind"] = form["new_thread_kind"].FirstOrDefault() ?? "theme" }));
+                var created = await svc.Create(EntityTypes.Thread, newThread.Trim(), null, kindMeta);
+                await svc.TagCapture(entity.Id, created.Id);
+            }
 
             // Attach all files
             foreach (var file in form.Files)
@@ -73,6 +119,51 @@ public static class CaptureEndpoints
 
             return Results.Ok(new { id = entity.Id });
         }).DisableAntiforgery();
+
+        // Threads, most recently used first: the song you are working on this
+        // week is the one you will tag ten more times.
+        api.MapGet("/threads", async (EntityService svc) =>
+        {
+            var stats = await svc.GetThreadsWithStats();
+            return Results.Ok(stats.Select(t => new
+            {
+                id = t.Thread.Id,
+                title = t.Thread.Title,
+                kind = MetaString(t.Thread.Meta, "kind") ?? "theme",
+                count = t.CaptureCount,
+                lastAt = t.LastCapture,
+            }).OrderByDescending(t => t.lastAt ?? DateTime.MinValue));
+        });
+
+        api.MapPost("/threads", async (HttpRequest request, EntityService svc) =>
+        {
+            var form = await request.ReadFormAsync();
+            var title = form["title"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(title)) return Results.BadRequest("no title");
+            var meta = JsonDocument.Parse(JsonSerializer.Serialize(
+                new Dictionary<string, string> { ["kind"] = form["kind"].FirstOrDefault() ?? "theme" }));
+            var thread = await svc.Create(EntityTypes.Thread, title.Trim(), null, meta);
+            return Results.Ok(new { id = thread.Id, title = thread.Title });
+        }).DisableAntiforgery();
+
+        // Recommendations, flat. The client groups by person / medium / date —
+        // three lenses over the same rows.
+        api.MapGet("/recs", async (EntityService svc) =>
+        {
+            var all = await svc.GetByType(EntityTypes.Capture);
+            return Results.Ok(all
+                .Where(e => MetaString(e.Meta, "mode") == "rec")
+                .OrderByDescending(e => e.CreatedAt)
+                .Select(e => new
+                {
+                    id = e.Id,
+                    title = e.Title,
+                    body = e.Body,
+                    from = MetaString(e.Meta, "from"),
+                    kind = MetaString(e.Meta, "kind"),
+                    createdAt = e.CreatedAt,
+                }));
+        });
 
         // Templates
         api.MapGet("/templates", async (EntityService svc) =>

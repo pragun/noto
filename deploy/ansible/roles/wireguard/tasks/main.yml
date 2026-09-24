@@ -87,15 +87,19 @@
 
 # Rendered as a PNG rather than terminal ASCII: the config embeds a private key
 # and terminal output ends up in scrollback and logs.
-- name: QR codes for phone-style peers
+#
+# Regenerated every run rather than guarded with creates:, because a QR guarded
+# that way silently keeps encoding the *old* config after the template changes —
+# you scan it, the tunnel comes up, and the change you made is simply absent.
+# qrencode is instant, so the only cost is the task always running.
+- name: QR codes for peers
   ansible.builtin.shell: >-
     qrencode -t png -o /etc/wireguard/peers/{{ item.name }}-qr.png
     < /etc/wireguard/peers/{{ item.name }}.conf
     && chmod 600 /etc/wireguard/peers/{{ item.name }}-qr.png
-  args:
-    creates: "/etc/wireguard/peers/{{ item.name }}-qr.png"
   loop: "{{ wg_peers }}"
   loop_control: { label: "{{ item.name }}" }
+  changed_when: false
 
 - name: WireGuard up and enabled at boot
   ansible.builtin.systemd:

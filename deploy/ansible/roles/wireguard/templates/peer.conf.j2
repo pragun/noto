@@ -4,13 +4,23 @@
 # split so it cannot take the default route, which is what lets WireGuard and
 # Tailscale coexist on the same machine.
 #
-# There is deliberately no DNS line. On the Mac it would override Tailscale's
-# MagicDNS system-wide. {{ noto_hostname }} resolves through ordinary public DNS
-# to {{ wg_subnet }}.1 and routes here because of AllowedIPs below — DNS and
-# routing are separate concerns.
+{% if item.dns | default(false) %}
+# DNS points at dnsmasq on the server, inside the tunnel. This peer's network
+# strips the RFC1918 answer for {{ noto_hostname }}, so asking a resolver past
+# that middlebox is the only way. Note the whole device resolves through here
+# while the tunnel is up.
+{% else %}
+# No DNS line on purpose: this peer also runs Tailscale, and a tunnel DNS entry
+# would override MagicDNS system-wide. {{ noto_hostname }} resolves through
+# ordinary public DNS and routes here via AllowedIPs — DNS and routing are
+# separate concerns.
+{% endif %}
 [Interface]
 PrivateKey = {{ wg_keys['/etc/wireguard/peers/' ~ item.name ~ '.key'] }}
 Address = {{ item.address }}/32
+{% if item.dns | default(false) %}
+DNS = {{ wg_subnet }}.1
+{% endif %}
 
 [Peer]
 PublicKey = {{ wg_keys['/etc/wireguard/server.pub'] }}
